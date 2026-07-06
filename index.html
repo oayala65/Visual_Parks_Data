@@ -1,0 +1,2730 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Analizador Universal de Combustible</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f6f8;--surface:#ffffff;--surface2:#f0f2f5;--border:#dee2e6;
+  --text:#1a1f2e;--muted:#6c757d;
+  --blue:#118dff;--green:#00b4b4;--orange:#f0883e;--purple:#9b59b6;
+  --red:#fd625e;--yellow:#f2c80f;--teal:#01b8aa;
+}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',Consolas,monospace;min-height:100vh}
+
+/* HEADER */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 2rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.logo{display:none}
+.header-info{flex:1}
+header h1{font-size:14px;font-weight:600;letter-spacing:.05em}
+header p{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+.badge{font-size:10px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;color:var(--muted);white-space:nowrap}
+.vessel-badge{font-size:11px;padding:4px 14px;background:var(--surface2);border:1px solid var(--blue);border-radius:20px;color:var(--blue);font-weight:600;display:none}
+
+main{padding:1.25rem 2rem;max-width:1700px;margin:0 auto}
+
+/* DROPZONE */
+.dropzone{border:2px dashed var(--border);border-radius:8px;padding:3rem 2rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:1.25rem;position:relative}
+.dropzone:hover,.dropzone.drag{border-color:var(--blue);background:rgba(88,166,255,.04)}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dropzone .dz-icon{font-size:2rem;opacity:.3;margin-bottom:.75rem}
+.dropzone h2{font-size:13px;font-weight:500;color:var(--text);margin-bottom:.4rem}
+.dropzone p{font-size:11px;color:var(--muted)}
+.dropzone.has-data{border-style:solid;border-color:var(--green);padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;text-align:left}
+.dropzone.has-data .dz-icon{font-size:1.2rem;opacity:1;margin-bottom:0;color:var(--green)}
+.dropzone.has-data h2{font-size:12px;color:var(--green);margin-bottom:2px}
+.dropzone.has-data p{font-size:10px}
+.dz-extra{margin-left:auto;display:flex;gap:6px;align-items:center}
+.btn-sm{padding:4px 12px;font-size:10px;font-family:inherit;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.btn-sm:hover{border-color:var(--blue);color:var(--text)}
+.btn-sm.primary{background:var(--blue);color:#0d1117;border-color:var(--blue);font-weight:700}
+.btn-sm.primary:hover{opacity:.85}
+.btn-sm.danger{border-color:var(--red);color:var(--red)}
+
+/* ALERT BANNER */
+.alert-bar{display:none;padding:8px 14px;border-radius:5px;font-size:11px;margin-bottom:1rem;border:1px solid}
+.alert-bar.warn{background:#1a150a;border-color:var(--yellow);color:var(--yellow)}
+.alert-bar.err{background:#1c1217;border-color:var(--red);color:var(--red)}
+
+/* SLICE PANEL */
+.slice-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1rem 1.25rem 1rem;margin-bottom:1rem;display:none}
+.slice-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem}
+.slice-header .label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.slice-dates{display:flex;gap:1.5rem;font-size:11px;flex-wrap:wrap}
+.dblock{display:flex;flex-direction:column;gap:2px}
+.dlabel{font-size:9px;color:var(--muted)}
+.dval{color:var(--blue);font-weight:600;letter-spacing:.03em}
+.range-wrap{position:relative;height:36px;margin:0 4px}
+.range-track{position:absolute;top:50%;transform:translateY(-50%);left:0;right:0;height:4px;background:var(--surface2);border-radius:2px}
+.range-fill{position:absolute;top:50%;transform:translateY(-50%);height:4px;background:var(--blue);border-radius:2px;pointer-events:none}
+.range-wrap input[type=range]{position:absolute;top:50%;transform:translateY(-50%);width:100%;height:4px;background:transparent;-webkit-appearance:none;appearance:none;pointer-events:none;margin:0}
+.range-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid var(--bg);cursor:pointer;pointer-events:all}
+.range-wrap input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid var(--bg);cursor:pointer;pointer-events:all}
+.ticks{position:relative;height:16px;margin:4px 4px 0}
+.ticks span{position:absolute;font-size:9px;color:var(--muted);transform:translateX(-50%)}
+.quick-btns{display:flex;gap:5px;flex-wrap:wrap;margin-top:.65rem;align-items:center}
+.qlabel{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.qbtn{padding:3px 10px;font-size:10px;font-family:inherit;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer}
+.qbtn:hover,.qbtn.active{color:var(--text);border-color:var(--blue)}
+
+/* KPI CARDS */
+.kpi-section{display:none}
+.section-label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:.9rem 0 .5rem}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:.75rem}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px 13px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.kpi.ok::before{background:var(--green)}
+.kpi.warn::before{background:var(--yellow)}
+.kpi.bad::before{background:var(--red)}
+.kpi.neutral::before{background:var(--border)}
+.kpi .klabel{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.kpi .kval{font-size:18px;font-weight:600;line-height:1}
+.kpi .ksub{font-size:9px;color:var(--muted);margin-top:3px}
+.kpi .kstatus{font-size:9px;margin-top:4px;font-weight:600}
+.kpi.ok .kstatus{color:var(--green)}
+.kpi.warn .kstatus{color:var(--yellow)}
+.kpi.bad .kstatus{color:var(--red)}
+
+/* AUDIT TABLE */
+.audit-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:1rem}
+.audit-table th{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:500}
+.audit-table td{padding:6px 10px;border-bottom:1px solid var(--surface2);color:var(--text)}
+.audit-table tr:hover td{background:var(--surface2)}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700}
+.pill.ok{background:rgba(63,185,80,.15);color:var(--green)}
+.pill.warn{background:rgba(210,153,34,.15);color:var(--yellow)}
+.pill.bad{background:rgba(248,81,73,.15);color:var(--red)}
+.pill.na{background:var(--surface2);color:var(--muted)}
+
+/* TABS */
+.tabs-wrap{border-bottom:1px solid var(--border);display:none}
+.tabs{display:flex;flex-wrap:wrap;align-items:center}
+.tab-group-label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:0 8px 0 4px}
+.tab{padding:9px 18px;font-size:11px;font-family:inherit;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;color:var(--muted);transition:color .15s,border-color .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--blue)}
+.panel{display:none;padding-top:.75rem}
+.panel.active{display:block}
+.chart-box{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:.5rem;margin-bottom:.75rem}
+.chart-box .chart-title{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.5rem .75rem .25rem}
+.toggle-bar{display:flex;flex-wrap:wrap;gap:5px;padding:.5rem .75rem}
+.tog{display:flex;align-items:center;gap:4px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;cursor:pointer;font-size:10px;color:var(--muted);user-select:none}
+.tog.on{color:var(--text);border-color:inherit}
+.tog .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* MOTOR SELECTOR */
+.motor-sel{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:.75rem;display:none}
+.mselbtn{padding:4px 14px;font-size:10px;font-family:inherit;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer}
+.mselbtn.active{color:var(--text);border-color:var(--blue)}
+
+/* ── Filename badge ── */
+.filename-badge{font-size:10px;padding:3px 10px;background:rgba(88,166,255,.12);
+  border:1px solid var(--blue);border-radius:20px;color:var(--blue);
+  max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:none}
+
+/* ── PDF button ── */
+.btn-pdf{padding:5px 14px;font-size:10px;font-family:inherit;
+  background:#bc8cff;color:#0d1117;border:none;border-radius:4px;
+  font-weight:700;cursor:pointer;letter-spacing:.05em;white-space:nowrap}
+.btn-pdf:hover{opacity:.85}
+.btn-pdf:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Caudalimetros config ── */
+.cfg-panel{background:var(--surface);border:1px solid var(--border);
+  border-radius:6px;padding:1rem 1.25rem;margin-bottom:1rem;display:none}
+.cfg-row{display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end}
+.cfg-field{display:flex;flex-direction:column;gap:4px}
+.cfg-field label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.cfg-field select,.cfg-field input[type=number]{
+  background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+  padding:6px 9px;font-size:11px;color:var(--text);font-family:inherit}
+.cfg-field select:focus,.cfg-field input:focus{outline:none;border-color:var(--blue)}
+
+/* ── KPI variants for caudalimetros ── */
+.kpi.caud::before{background:#f85149}
+.kpi.tk::before{background:#58a6ff}
+.kpi.diff::before{background:#3fb950}
+
+/* ── Print/PDF styles ── */
+@media print{
+  .dropzone,.slice-panel,.tabs-wrap,.motor-sel,
+  .cfg-panel,.btn-pdf,.badge,.vessel-badge,
+  .filename-badge,.btn-sm{display:none!important}
+  .panel{display:block!important}
+  .chart-box{break-inside:avoid;page-break-inside:avoid}
+  body{background:#fff!important;color:#000!important}
+  .kpi,.sc,.audit-table td,.audit-table th{
+    background:#f5f5f5!important;color:#000!important;border-color:#ccc!important}
+  header{background:#f0f0f0!important;border-color:#ccc!important}
+  .kpi::before{display:none}
+}
+.dt-input{
+  background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+  padding:4px 7px;font-size:11px;color:var(--text);font-family:inherit;
+  color-scheme:light;cursor:pointer;margin-top:2px;
+}
+.dt-input:focus{outline:none;border-color:var(--blue);}
+.dt-input:hover{border-color:var(--blue);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-info">
+    <div style="display:flex;align-items:baseline;gap:0;line-height:1;margin-bottom:3px">
+      <span style="font-size:22px;font-weight:800;color:#f47920;letter-spacing:-.5px;font-family:'Arial Black',Arial,sans-serif">ROCK</span><span style="font-size:22px;font-weight:300;color:#e6edf3;letter-spacing:-.5px;font-family:'Arial Black',Arial,sans-serif">tree</span>
+    </div>
+    <p style="font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase">Analizador de Combustible · Auditoría · Consumo · Tanques</p>
+  </div>
+  <div style="flex:1"></div>
+  <div id="filenameDisplay" style="display:none;flex-direction:column;align-items:flex-end;gap:2px;margin-right:8px">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Archivo analizado</div>
+    <div id="filenameText" style="font-size:12px;color:#e6edf3;font-weight:600;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right"></div>
+    <div id="filenameMeta" style="font-size:10px;color:var(--muted)"></div>
+  </div>
+  <div class="vessel-badge" id="vesselBadge" style="display:none">—</div>
+  <div class="filename-badge" id="filenameBadge" style="display:none">—</div>
+  <div class="badge" id="rowBadge">Sin datos</div>
+  <button class="btn-sm" id="btnCsv" onclick="exportData('csv')" disabled title="Descargar datos (últimos 8 días)">⬇ CSV</button>
+  <button class="btn-sm" id="btnXlsx" onclick="exportData('xlsx')" disabled title="Descargar datos (últimos 8 días)">⬇ Excel</button>
+  <button class="btn-pdf" id="btnPdf" onclick="exportPDF()" disabled title="Exportar informe PDF">&#128196; Exportar PDF</button>
+</header>
+
+<main>
+
+<!-- N8N PANEL -->
+<div class="slice-panel" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;margin-bottom:1rem">
+  <div class="dblock"><span class="dlabel">Empresa</span>
+    <select id="n8nEmpresa" class="dt-input" style="width:200px" onchange="fillBarcos()"></select>
+  </div>
+  <div class="dblock"><span class="dlabel">Barco</span>
+    <select id="n8nVessel" class="dt-input" style="width:200px"></select>
+  </div>
+  <div class="dblock"><span class="dlabel">Desde</span>
+    <input type="datetime-local" id="n8nFrom" class="dt-input" step="1"/>
+  </div>
+  <div class="dblock"><span class="dlabel">Hasta</span>
+    <input type="datetime-local" id="n8nTo" class="dt-input" step="1"/>
+  </div>
+  <button class="btn-sm primary" onclick="loadFromN8N()">⟳ Cargar desde n8n</button>
+  <span id="n8nStatus" style="font-size:10px;color:var(--muted)"></span>
+</div>
+
+<!-- DROPZONE (alternativa manual) -->
+<div class="dropzone" id="dropzone">
+  <input type="file" id="csvInput" accept=".csv" multiple/>
+  <div class="dz-icon">&#8613;</div>
+  <h2>Arrastrá o hacé click para cargar un CSV</h2>
+  <p>Alternativa manual · o usá el panel de arriba para traer datos desde n8n</p>
+</div>
+
+<div class="alert-bar" id="alertBar"></div>
+
+<!-- SLICE -->
+<div class="slice-panel" id="slicePanel">
+  <div class="slice-header">
+    <span class="label">Rango de tiempo</span>
+    <div class="slice-dates">
+      <div class="dblock"><span class="dlabel">Desde</span><span class="dval" id="lblFrom">—</span><br><input type="datetime-local" id="inputFrom" class="dt-input" step="1"/></div>
+      <div class="dblock"><span class="dlabel">Hasta</span><span class="dval" id="lblTo">—</span><br><input type="datetime-local" id="inputTo" class="dt-input" step="1"/></div>
+      <div class="dblock"><span class="dlabel">Filas</span><span class="dval" id="lblCount">—</span></div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn-sm primary" onclick="addMoreCSV()">+ Agregar CSV</button>
+      <input type="file" id="addCsvInput" accept=".csv" multiple style="display:none"/>
+      <button class="btn-sm danger" onclick="clearAll()">Limpiar</button>
+    </div>
+  </div>
+  <div class="range-wrap">
+    <div class="range-track"></div>
+    <div class="range-fill" id="rangeFill"></div>
+    <input type="range" id="sliderFrom" min="0" max="100" value="0"/>
+    <input type="range" id="sliderTo"   min="0" max="100" value="100"/>
+  </div>
+  <div class="ticks" id="ticks"></div>
+  <div class="quick-btns" id="quickBtns"><span class="qlabel">Acceso rápido:</span></div>
+</div>
+
+<!-- KPI -->
+<div class="kpi-section" id="kpiSection">
+  <div class="section-label">Auditoría de calidad de combustible</div>
+  <div id="kpiGrid" class="kpi-grid"></div>
+  <div class="section-label">Estado por motor / lado</div>
+  <div id="auditTableWrap"></div>
+</div>
+
+<!-- MOTOR SELECTOR -->
+<div class="motor-sel" id="motorSel"></div>
+
+<!-- TABS -->
+<div class="tabs-wrap" id="tabsWrap">
+  <div class="tabs" id="tabsBar"></div>
+</div>
+<div id="panelsContainer"></div>
+
+<!-- CAUDALIMETROS CONFIG PANEL (shown only when caudal tab active) -->
+<div class="cfg-panel" id="cfgCaudal">
+  <div style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:.75rem">
+    Configuración — Caudalímetros vs Tanque
+  </div>
+  <div class="cfg-row">
+    <div class="cfg-field">
+      <label>Columna Caudalímetros (acumulado)</label>
+      <select id="selCaud"></select>
+    </div>
+    <div class="cfg-field">
+      <label>Columna Nivel de Tanque</label>
+      <select id="selTk"></select>
+    </div>
+    <div class="cfg-field">
+      <label>Umbral recarga (L)</label>
+      <input type="number" id="inpUmbral" value="5000" min="0" step="100" style="width:110px"/>
+    </div>
+    <div class="cfg-field">
+      <label>&nbsp;</label>
+      <button class="btn-sm primary" onclick="calcularCaudal()">Calcular</button>
+    </div>
+  </div>
+  <div style="font-size:10px;margin-top:.5rem">
+    <span id="caudHint" style="color:var(--muted)">Cargá un CSV para auto-detectar columnas</span>
+  </div>
+  <div style="font-size:10px;color:var(--muted);margin-top:.5rem;line-height:1.6">
+    <b style="color:var(--text)">CAUD</b> = caudalímetro acumulado desde t₀ &nbsp;·&nbsp;
+    <b style="color:var(--text)">TK</b> = consumo de tanque desde t₀ (con corrección de recargas) &nbsp;·&nbsp;
+    <b style="color:var(--text)">DIFF</b> = TK − CAUD (diferencia de balance)
+  </div>
+</div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DATA STATE
+// ═══════════════════════════════════════════════════════
+let RAW     = null;   // columnar {ts:[], col:[], ...}
+let currentFilenames = [];
+let fData   = null;   // filtered slice
+let COLS    = [];     // available columns in current dataset
+let MOTORS  = [];     // ['BR','STB','CNT'/'Central']
+let dayIndex= [];
+let sliceFrom=0, sliceTo=0;
+let debounce=null;
+let activeTab='consumo';
+let activeMotor='BR';
+let visState={};
+
+// ═══════════════════════════════════════════════════════
+// COLUMN DETECTION
+// ═══════════════════════════════════════════════════════
+function detectDateCol(fields){
+  return fields.find(f=>['DATE/TIME','FECHA','TIME','HORA'].some(k=>f.toUpperCase().includes(k)))||null;
+}
+
+function detectMotors(cols){
+  const motors=[];
+  if(cols.some(c=>/ BR/.test(c)||/BR$/.test(c))) motors.push('BR');
+  if(cols.some(c=>/ STB/.test(c)||/STB$/.test(c))) motors.push('STB');
+  if(cols.some(c=>c.includes(' CNT')||c==='RPM Prop. Central'||c.includes('Prop. Central'))) motors.push('CNT');
+  return motors;
+}
+
+// Detect what data profile this CSV has
+function detectProfile(cols){
+  const hasTricor = cols.some(c=>c.startsWith('Densidad Inyec.')||c.startsWith('SA Inyeccion')||c.startsWith('Error Inyeccion Prop.'));
+  const hasRack   = cols.some(c=>c.startsWith('Rack '));
+  const hasBypass = cols.some(c=>c.startsWith('Bypass '));
+  const hasHM     = cols.some(c=>c.startsWith('Horas Maquina')||c.startsWith('HM Prop'));
+  const hasTrip   = cols.some(c=>c.startsWith('Trip Volume'));
+  const hasGen    = cols.some(c=>c.startsWith('Flow Rate Gen.')||c.startsWith('Trip Volume Gen.'));
+  const hasAgua   = cols.some(c=>c.startsWith('Agua TK'));
+  const hasTripTotal = cols.some(c=>c.toLowerCase().includes('total caudalímetro')||c.toLowerCase().includes('caudalímetro total')||c.toLowerCase().includes('caudalímetros total'));
+  return {hasTricor,hasRack,hasBypass,hasHM,hasTrip,hasGen,hasAgua,hasTripTotal};
+}
+
+// Universal TK column detector — handles TK1 BR, TK 1 BR, TK DIARIO BR, etc.
+// Excludes: Agua TK, Temp. TK, Agua en TK (prefix check), TK Diario Gen., TK Diario Prop.
+function detectTKCols(cols, side){
+  return cols.filter(c=>{
+    // Must start with TK (not "Agua TK", "Temp. TK", "Agua en TK")
+    const trimmed = c.trim();
+    if(!/^TK/i.test(trimmed)) return false;
+    const u = trimmed.toUpperCase().replace(/\s+/g,' ');
+    if(side==='BR'){
+      // Must contain BR and not STB, exclude TK Diario Gen/Prop
+      if(u.includes('STB')||u.includes('GEN.')||u.includes('PROP.')) return false;
+      return u.includes(' BR')||u.endsWith('BR');
+    }
+    if(side==='STB'){
+      if(u.includes('BR')||u.includes('GEN.')||u.includes('PROP.')) return false;
+      return u.includes(' STB')||u.endsWith('STB');
+    }
+    return false;
+  });
+}
+
+// TK sin lado: "TK Diario", "TK Centro", etc. (excluye BR/STB/Gen./Prop. y "Agua TK")
+function detectTKCenterCols(cols){
+  return cols.filter(c=>{
+    const trimmed=c.trim();
+    if(!/^TK/i.test(trimmed)) return false;
+    const u=trimmed.toUpperCase().replace(/\s+/g,' ');
+    if(u.includes('GEN.')||u.includes('PROP.')) return true; // TK Diario Gen./Prop.
+    if(u.includes(' BR')||u.endsWith('BR')||u.includes('STB')) return false;
+    return true;
+  });
+}
+
+// Universal caudalimetro column detector
+function detectCaudCol(cols){
+  // Try exact known column names first (fastest)
+  const exact=['Caudalímetro Total','Caudalímetros Total','Total Caudalímetro',
+               'Caudalimetro Total','Caudalimetros Total','Total Caudalimetro'];
+  for(const e of exact){ if(cols.includes(e)) return e; }
+  // Fuzzy fallback
+  const kws=['caudalímetros total','caudalimetros total','caudalímetro total',
+             'caudalimetro total','total caudalímetro','total caudalimetro','caud'];
+  const lo=cols.map(c=>c.toLowerCase());
+  for(const kw of kws){ const i=lo.findIndex(c=>c.includes(kw)); if(i>=0) return cols[i]; }
+  return null;
+}
+
+// Universal remanencia/total tanques detector
+function detectRemCol(cols){
+  const kws=['remanencia total','total tanques','remanencia'];
+  // Prefer exact matches first
+  const exact=['Remanencia Total','Total Tanques'];
+  for(const e of exact){ if(cols.includes(e)) return e; }
+  const lo=cols.map(c=>c.toLowerCase());
+  for(const kw of kws){
+    const i=lo.findIndex(c=>c.includes(kw)&&!c.includes('(f)'));
+    if(i>=0) return cols[i];
+  }
+  return null;
+}
+
+// Universal col() that also handles Rocktree naming (no spaces: TK1BR vs TK 1 BR)
+function colFlex(prefix, motor){
+  // exact match first
+  const direct=prefix+' '+motor;
+  if(COLS.includes(direct)) return direct;
+  if(motor==='CNT'){
+    if(COLS.includes(prefix+' CNT')) return prefix+' CNT';
+    if(COLS.includes(prefix+' Central')) return prefix+' Central';
+  }
+  return null;
+}
+
+// For a given category prefix and motor suffix, find actual column name
+function col(prefix, motor){
+  // e.g. col('Densidad Inyec. Prop.','BR') => 'Densidad Inyec. Prop. BR'
+  const direct = prefix+' '+motor;
+  if(COLS.includes(direct)) return direct;
+  // CNT special cases
+  if(motor==='CNT'){
+    if(COLS.includes(prefix+' CNT')) return prefix+' CNT';
+    if(COLS.includes(prefix+' Central')) return prefix+' Central';
+  }
+  return null;
+}
+
+function hasCol(prefix,motor){ return !!col(prefix,motor); }
+
+// TK columns for a side
+function tkCols(side){
+  if(side==='BR'||side==='STB') return detectTKCols(COLS,side);
+  // shared/centro tanks not belonging to BR or STB
+  return COLS.filter(c=>{
+    const u=c.toUpperCase().replace(/\s+/g,' ').trim();
+    return (u.startsWith('TK')&&!u.includes(' BR')&&!u.includes(' STB'))||
+           u.includes('CENTRO');
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// CSV PARSING
+// ═══════════════════════════════════════════════════════
+function parseDate(s){
+  if(!s) return null;
+  s=s.trim();
+  // 1) DD/MM/YYYY HH:MM:SS or DD-MM-YYYY HH:MM:SS (dayfirst - estos CSVs)
+  let m=s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})[T ](\d{2}):(\d{2}):(\d{2})/);
+  if(m) return new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6]}`);
+  // 2) YYYY-MM-DDTHH:MM:SS (ISO)
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+  if(m) return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`);
+  // 3) fallback
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+
+function rowsToColumnar(rows, fields){
+  const dc=detectDateCol(fields);
+  if(!dc) throw new Error('No se encontró columna de fecha/hora en el CSV');
+  const numCols=fields.filter(f=>f!==dc);
+  let parsed=rows.map(r=>{
+    const dt=parseDate(r[dc]);
+    if(!dt||isNaN(dt)) return null;
+    const obj={ts:dt.toISOString().slice(0,19)};
+    for(const c of numCols){const v=parseFloat(r[c]);obj[c]=isNaN(v)?null:Math.round(v*100)/100;}
+    return obj;
+  }).filter(Boolean);
+  parsed.sort((a,b)=>a.ts<b.ts?-1:1);
+  const out={ts:parsed.map(r=>r.ts)};
+  for(const c of numCols) out[c]=parsed.map(r=>r[c]??null);
+  return out;
+}
+
+function mergeColumnar(base,extra){
+  // union of all keys
+  const allKeys=[...new Set([...Object.keys(base),...Object.keys(extra)])];
+  const map=new Map();
+  const fillMap=(data)=>{
+    for(let i=0;i<data.ts.length;i++){
+      const ts=data.ts[i];
+      if(!map.has(ts)) map.set(ts,{ts});
+      const row=map.get(ts);
+      for(const k of allKeys) if(k!=='ts'&&data[k]!==undefined) row[k]=data[k][i]??null;
+    }
+  };
+  fillMap(base); fillMap(extra);
+  const sorted=[...map.values()].sort((a,b)=>a.ts<b.ts?-1:1);
+  const merged={ts:sorted.map(r=>r.ts)};
+  for(const k of allKeys) if(k!=='ts') merged[k]=sorted.map(r=>r[k]??null);
+  return merged;
+}
+
+// ═══════════════════════════════════════════════════════
+// N8N INGESTION (Cavalier I Measurements Export)
+// ═══════════════════════════════════════════════════════
+const N8N_WEBHOOK_URL='https://grupo2py.app.n8n.cloud/webhook/cavalier-measurements';
+
+// ── FLOTA: Empresa → Barcos ──
+const FLEET={
+'ADM Paraguay':['Asunceno','Decatur Lady','Humaita','María Auxiliadora','Tendota'],
+'COPANU':['Don Juan','Nautic Twin'],
+'Cargill':['Aguara','Aguilucho','Puma'],
+'Cargo Line':['Deidamia C','Don Abraham','Doña Elvira','Juanjo A','María A','Nora E','Nuar B','Santa María','Sheila J'],
+'DEMO':['Demo2026'],
+'Girona - Rio Sur':['Kyrios','Veronica V'],
+'GuaranFeeder':['Itaipu','Tuyuti'],
+'Hidrovias do Brasil':['Aquarius','Aquila','Centaurus','Draco','Grus','Herkules III','Herkules IV','Herkules V','Herkules XV','Herkules XVI','Herkules XVII','Herkules XVIII','Hydra','Jacunda','Lynx','Pegasus','Perseus','Phoenix','Pirarara','Pirarucu','Scorpius','Taurus'],
+'ISL S.A.':['Innovador'],
+'Impala Terminals':['Campana','Encarnación','Ladario','Pantanal','San Antonio'],
+'LHG Mining':['Cavalier VI','Don Kasbergen','Juliet','Penelope'],
+'Logico Paraguay S.A.':['Guyrati','Mbigua','Taguato','Urutau'],
+'Líneas Panchita Group':['Diego Juan','Don Aureliano','Don Mauricio','Don Pacheco','Don Sebastián','Doña Carmen','Esperanza','Maricella','Montelindo','Montelindo 2','Montelindo 3','Olimpo','PiraBebe','Rio de la Plata','Tio Jan','Tio Kike'],
+'Navemar S.A.':['Power Pack 06','Power Pack 07','Power Pack 08','Power Pack 09','Power Pack 10','Ava Payagua','Belen B','Carmen S','Clara B','Raul D'],
+'Transmar SACI':['Don Toyo','Doña Keiko','Enterprise','Reina del Paraná'],
+'UABL Paraguay S.A':['Asunción','Capitan Bilbo','Cavalier I','Cavalier IV','Cavalier IX','Cavalier VII','Cavalier XI','Cavalier XV','Chaco X','Itapua','San Martin']
+};
+
+function fillEmpresas(){
+  const selE=document.getElementById('n8nEmpresa');
+  selE.innerHTML='';
+  Object.keys(FLEET).forEach(e=>{
+    const o=document.createElement('option');o.value=e;o.textContent=e;
+    if(e==='UABL Paraguay S.A') o.selected=true;
+    selE.appendChild(o);
+  });
+  fillBarcos();
+}
+function fillBarcos(){
+  const emp=document.getElementById('n8nEmpresa').value;
+  const selB=document.getElementById('n8nVessel');
+  selB.innerHTML='';
+  (FLEET[emp]||[]).forEach(b=>{
+    const o=document.createElement('option');o.value=b;o.textContent=b;
+    if(b==='Cavalier I') o.selected=true;
+    selB.appendChild(o);
+  });
+}
+document.addEventListener('DOMContentLoaded',fillEmpresas);
+
+function fmtN8NDate(dtLocal){
+  // datetime-local => 'YYYY-MM-DD HH:MM:SS'
+  if(!dtLocal) return null;
+  return dtLocal.replace('T',' ')+(dtLocal.length===16?':00':'');
+}
+
+async function loadFromN8N(){
+  const vessel=document.getElementById('n8nVessel').value.trim()||'CAVALIER I';
+  const from=fmtN8NDate(document.getElementById('n8nFrom').value);
+  const to=fmtN8NDate(document.getElementById('n8nTo').value);
+  const st=document.getElementById('n8nStatus');
+  st.textContent='Consultando n8n...';
+  showAlert('Consultando workflow n8n...','warn');
+  try{
+    const params=new URLSearchParams({vessel});
+    if(from) params.set('fechaInicio',from);
+    if(to)   params.set('fechaFin',to);
+    const res=await fetch(N8N_WEBHOOK_URL+'?'+params.toString());
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const rows=await res.json();
+    if(!Array.isArray(rows)||!rows.length) throw new Error('Sin datos para el rango/buque solicitado');
+    const parsed=n8nRowsToColumnar(rows);
+    currentFilenames=['n8n: '+vessel];
+    finalize(parsed,[]);
+    st.textContent=rows.length.toLocaleString('es')+' registros recibidos';
+  }catch(e){
+    showAlert('Error consultando n8n: '+e.message,'err');
+    st.textContent='Error: '+e.message;
+  }
+}
+
+function n8nRowsToColumnar(rows){
+  // rows: [{timestamp_round:'DD-MM-YYYY HH:MM:SS', 'TK1 BR':'467.43', ...}, ...]
+  const toISO=s=>{
+    s=String(s).trim();
+    const m=s.match(/^(\d{2})-(\d{2})-(\d{4})[T ](\d{2}):(\d{2}):(\d{2})/);
+    if(m) return `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6]}`;
+    return new Date(s).toISOString().slice(0,19);
+  };
+  const allKeys=new Set();
+  rows.forEach(r=>Object.keys(r).forEach(k=>{if(k!=='timestamp_round') allKeys.add(k);}));
+  const numCols=[...allKeys];
+  rows.forEach(r=>r.__iso=toISO(r.timestamp_round));
+  rows.sort((a,b)=>a.__iso<b.__iso?-1:1);
+  const out={ts:rows.map(r=>r.__iso)};
+  for(const c of numCols){
+    out[c]=rows.map(r=>{
+      const v=r[c];
+      if(v===undefined||v===null||v==='') return null;
+      const f=parseFloat(v);
+      return isNaN(f)?null:Math.round(f*100)/100;
+    });
+  }
+  return out;
+}
+
+// ── EXPORT DATOS (periodo analizado / slice activo) ──
+function exportData(fmt){
+  const D=(fData&&fData.ts&&fData.ts.length)?fData:RAW;
+  if(!D||!D.ts.length){showAlert('Sin datos para exportar','err');return;}
+  const ts=D.ts;
+  const cols=Object.keys(D).filter(k=>k!=='ts');
+  const header=['timestamp',...cols];
+  const rows=[];
+  for(let i=0;i<ts.length;i++){
+    rows.push([ts[i].slice(8,10)+'/'+ts[i].slice(5,7)+'/'+ts[i].slice(0,4)+' '+ts[i].slice(11,16),...cols.map(c=>D[c][i]==null?'':D[c][i])]);
+  }
+  const vessel=(currentFilenames[0]||'datos').replace(/[^\w\- ]/g,'').trim().replace(/\s+/g,'_');
+  const fname=vessel+'_'+ts[0].slice(0,10)+'_a_'+ts[ts.length-1].slice(0,10);
+  if(fmt==='csv'){
+    const csv=[header.join(','),...rows.map(r=>r.map(v=>String(v).includes(',')?'"'+v+'"':v).join(','))].join('\n');
+    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname+'.csv';a.click();URL.revokeObjectURL(a.href);
+  }else{
+    if(typeof XLSX==='undefined'){showAlert('Librería Excel no cargada (sin conexión)','err');return;}
+    const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Datos');
+    XLSX.writeFile(wb,fname+'.xlsx');
+  }
+}
+
+function loadFiles(files){
+  let pending=files.length, combined=null, errors=[];
+  Array.from(files).forEach(f=>{ if(!currentFilenames.includes(f.name)) currentFilenames.push(f.name); });
+  if(!pending) return;
+  showAlert('Cargando '+pending+' archivo(s)...','warn');
+  Array.from(files).forEach(file=>{
+    Papa.parse(file,{
+      header:true,skipEmptyLines:true,
+      complete(res){
+        try{
+          const parsed=rowsToColumnar(res.data,res.meta.fields);
+          combined=combined?mergeColumnar(combined,parsed):parsed;
+        }catch(e){errors.push(file.name+': '+e.message);}
+        if(--pending===0) finalize(combined,errors);
+      },
+      error(e){errors.push(file.name+': '+e.message);if(--pending===0)finalize(combined,errors);}
+    });
+  });
+}
+
+function finalize(data,errors){
+  if(errors.length) showAlert('Errores: '+errors.join(' | '),'err');
+  else hideAlert();
+  if(!data||!data.ts.length){showAlert('No se pudieron leer datos válidos','err');return;}
+
+  if(RAW) data=mergeColumnar(RAW,data);
+  RAW=data;
+  COLS=Object.keys(RAW).filter(k=>k!=='ts');
+  MOTORS=detectMotors(COLS);
+
+  const N=RAW.ts.length;
+  document.getElementById('rowBadge').textContent=N.toLocaleString('es')+' filas';
+  // Update filename display
+  const fb=document.getElementById('filenameBadge');
+  if(fb){fb.style.display='none';}
+  const fd=document.getElementById('filenameDisplay');
+  const ft=document.getElementById('filenameText');
+  const fm=document.getElementById('filenameMeta');
+  if(fd&&ft&&fm){
+    fd.style.display='flex';
+    // Show filenames — if multiple, show count + list on hover
+    const names=currentFilenames;
+    if(names.length===1){
+      ft.textContent='📄 '+names[0];
+      ft.title=names[0];
+    } else {
+      ft.textContent='📄 '+names[names.length-1]+' + '+(names.length-1)+' más';
+      ft.title=names.join('\n');
+    }
+    fm.textContent=N.toLocaleString('es')+' registros · '+RAW.ts[0].replace('T',' ').slice(0,10)+' → '+RAW.ts[N-1].replace('T',' ').slice(0,10);
+  }
+  document.getElementById('btnPdf').disabled=false;
+  document.getElementById('btnCsv').disabled=false;
+  document.getElementById('btnXlsx').disabled=false;
+  document.getElementById('vesselBadge').style.display='';
+
+  // try to extract vessel name from data pattern
+  const fname=COLS.length>5?'Multi-archivo':COLS[0]||'—';
+  document.getElementById('vesselBadge').textContent='✓ '+N.toLocaleString('es')+' registros';
+
+  // Update dropzone
+  const dz=document.getElementById('dropzone');
+  dz.className='dropzone has-data';
+  dz.querySelector('.dz-icon').textContent='✓';
+  const motorNames=MOTORS.map(m=>m==='CNT'?'Central':m).join(', ');
+  dz.querySelector('h2').textContent=N.toLocaleString('es')+' filas cargadas · '+COLS.length+' columnas · Motores: '+motorNames;
+  dz.querySelector('p').textContent='Rango: '+RAW.ts[0].replace('T',' ')+' → '+RAW.ts[N-1].replace('T',' ');
+
+  initSlider();
+  buildMotorSel();
+  buildTabs();
+  applySlice();
+
+  document.getElementById('slicePanel').style.display='block';
+  document.getElementById('kpiSection').style.display='block';
+  document.getElementById('tabsWrap').style.display='block';
+  document.getElementById('motorSel').style.display='flex';
+}
+
+// ═══════════════════════════════════════════════════════
+// SLIDER
+// ═══════════════════════════════════════════════════════
+function buildDayIndex(){
+  dayIndex=[];
+  const ts=RAW.ts; let last='';
+  for(let i=0;i<ts.length;i++){const d=ts[i].slice(0,10);if(d!==last){dayIndex.push({day:d,idx:i});last=d;}}
+}
+
+function initSlider(){
+  const N=RAW.ts.length;
+  buildDayIndex();
+  const sF=document.getElementById('sliderFrom');
+  const sT=document.getElementById('sliderTo');
+  sF.max=N-1;sF.value=0;
+  sT.max=N-1;sT.value=N-1;
+  sliceFrom=0;sliceTo=N-1;
+  sF.oninput=sT.oninput=onSlide;
+  buildTicks();buildQuickBtns();updateFill();updateSliderLabels();
+}
+
+function buildTicks(){
+  const wrap=document.getElementById('ticks');
+  const N=RAW.ts.length;
+  const step=Math.max(1,Math.ceil(dayIndex.length/10));
+  wrap.innerHTML=dayIndex.filter((_,i)=>i%step===0)
+    .map(d=>`<span style="left:${(d.idx/(N-1)*100).toFixed(1)}%">${d.day.slice(5)}</span>`).join('');
+}
+
+function buildQuickBtns(){
+  const c=document.getElementById('quickBtns');
+  c.querySelectorAll('.qbtn').forEach(b=>b.remove());
+  const N=RAW.ts.length;
+  for(const {day,idx} of dayIndex){
+    const btn=document.createElement('button');
+    btn.className='qbtn';btn.textContent=day.slice(5);btn.dataset.day=day;
+    btn.onclick=()=>{
+      const next=dayIndex.find(d=>d.day>day);
+      document.getElementById('sliderFrom').value=idx;
+      document.getElementById('sliderTo').value=next?next.idx-1:N-1;
+      document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');onSlide();
+    };
+    c.appendChild(btn);
+  }
+  const all=document.createElement('button');
+  all.className='qbtn active';all.textContent='Todo';
+  all.onclick=()=>{
+    document.getElementById('sliderFrom').value=0;
+    document.getElementById('sliderTo').value=N-1;
+    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+    all.classList.add('active');onSlide();
+  };
+  c.appendChild(all);
+}
+
+function onSlide(){
+  let f=+document.getElementById('sliderFrom').value;
+  let t=+document.getElementById('sliderTo').value;
+  if(f>=t){if(event?.target.id==='sliderFrom')f=t-1;else t=f+1;
+    document.getElementById('sliderFrom').value=f;document.getElementById('sliderTo').value=t;}
+  sliceFrom=f;sliceTo=t;
+  updateFill();updateSliderLabels();
+  clearTimeout(debounce);debounce=setTimeout(applySlice,150);
+}
+
+function updateFill(){
+  const N=RAW.ts.length;
+  document.getElementById('rangeFill').style.left=(sliceFrom/(N-1)*100).toFixed(2)+'%';
+  document.getElementById('rangeFill').style.right=(100-sliceTo/(N-1)*100).toFixed(2)+'%';
+
+  const iF2=document.getElementById('inputFrom');
+  const iT2=document.getElementById('inputTo');
+  if(RAW&&RAW.ts&&RAW.ts.length){
+    const dtMin=RAW.ts[0].slice(0,16);
+    const dtMax=RAW.ts[RAW.ts.length-1].slice(0,16);
+    if(iF2){iF2.min=dtMin;iF2.max=dtMax;iF2.oninput=()=>onDateInput('from');}
+    if(iT2){iT2.min=dtMin;iT2.max=dtMax;iT2.oninput=()=>onDateInput('to');}
+  }
+}
+
+function updateSliderLabels(){
+  document.getElementById('lblFrom').textContent=RAW.ts[sliceFrom].replace('T',' ');
+  document.getElementById('lblTo').textContent=RAW.ts[sliceTo].replace('T',' ');
+  document.getElementById('lblCount').textContent=(sliceTo-sliceFrom+1).toLocaleString('es');
+
+  const iF=document.getElementById('inputFrom');
+  const iT=document.getElementById('inputTo');
+  if(iF) iF.value=RAW.ts[sliceFrom].slice(0,16);
+  if(iT) iT.value=RAW.ts[sliceTo].slice(0,16);
+}
+
+function onDateInput(which){
+  if(!RAW) return;
+  const inp=document.getElementById(which==='from'?'inputFrom':'inputTo');
+  if(!inp||!inp.value) return;
+  const target=inp.value.length===16?inp.value+':00':inp.value;
+  const ts=RAW.ts;
+  let lo=0,hi=ts.length-1,idx=0;
+  while(lo<=hi){const mid=(lo+hi)>>1;if(ts[mid]<=target){idx=mid;lo=mid+1;}else hi=mid-1;}
+  const N=ts.length;
+  if(which==='from'){
+    sliceFrom=Math.max(0,Math.min(idx,sliceTo-1));
+    document.getElementById('sliderFrom').value=sliceFrom;
+  } else {
+    sliceTo=Math.max(sliceFrom+1,Math.min(idx,N-1));
+    document.getElementById('sliderTo').value=sliceTo;
+  }
+  updateFill();
+  document.getElementById('lblCount').textContent=(sliceTo-sliceFrom+1).toLocaleString('es');
+  clearTimeout(debounce);debounce=setTimeout(applySlice,300);
+}
+
+function applySlice(){
+  fData={};
+  for(const k of Object.keys(RAW)) fData[k]=RAW[k].slice(sliceFrom,sliceTo+1);
+  renderKPIs();
+  renderActiveTab();
+  // If caudal tab is active and columns are configured, auto-recalc
+  if(activeTab==='caudal' && caudConfig){
+    // Restore selector values and recalc with new slice
+    const sc=document.getElementById('selCaud');
+    const st=document.getElementById('selTk');
+    const su=document.getElementById('inpUmbral');
+    if(sc) sc.value=caudConfig.colCaud;
+    if(st) st.value=caudConfig.colTk;
+    if(su) su.value=caudConfig.umbral;
+    calcularCaudal();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function arr(key){return fData[key]||[];}
+function valid(a){return a.filter(v=>v!==null&&!isNaN(v));}
+function avg(a){const v=valid(a);return v.length?v.reduce((s,x)=>s+x,0)/v.length:null;}
+function mn(a){const v=valid(a);return v.length?Math.min(...v):null;}
+function mx(a){const v=valid(a);return v.length?Math.max(...v):null;}
+function last(a){const v=valid(a);return v.length?v[v.length-1]:null;}
+function fmt(v,d=1){return v===null||isNaN(v)?'—':(typeof d==='string'?v.toLocaleString('es',{maximumFractionDigits:0}):v.toFixed(d));}
+
+// ═══════════════════════════════════════════════════════
+// KPI / AUDIT
+// ═══════════════════════════════════════════════════════
+const DIESEL_DENS_MIN=810,DIESEL_DENS_MAX=890;
+const DIESEL_TEMP_MIN=20,DIESEL_TEMP_MAX=70;
+const ERROR_THRESH=0.5;
+
+function densStatus(v){
+  if(v===null) return 'na';
+  if(v<500||v>1200) return 'bad';   // invalid
+  if(v<DIESEL_DENS_MIN||v>DIESEL_DENS_MAX) return 'warn';
+  return 'ok';
+}
+function tempStatus(v){
+  if(v===null) return 'na';
+  if(v<0||v>120) return 'bad';
+  if(v<DIESEL_TEMP_MIN||v>DIESEL_TEMP_MAX) return 'warn';
+  return 'ok';
+}
+function sasbStatus(v){
+  if(v===null) return 'na';
+  if(v<50) return 'bad';
+  if(v<70) return 'warn';
+  return 'ok';
+}
+function errorStatus(v){
+  if(v===null) return 'na';
+  if(Math.abs(v)>ERROR_THRESH) return 'bad';
+  return 'ok';
+}
+
+function statusLabel(s,v,unit=''){
+  const labels={ok:'✓ Normal',warn:'⚠ Atención',bad:'✗ Alerta',na:'—'};
+  return labels[s]||s;
+}
+
+function renderKPIs(){
+  // Global KPIs across all motors
+  const grid=document.getElementById('kpiGrid');
+  grid.innerHTML='';
+  const kpis=[];
+
+  for(const m of MOTORS){
+    const cDI=col('Densidad Inyec. Prop.',m);
+    const cDR=col('Densidad Retor. Prop.',m);
+    const cTI=col('Temp. Inyeccion Prop.',m);
+    const cSA=col('SA Inyeccion Prop.',m);
+    const cER=col('Error Inyeccion Prop.',m);
+    const cFI=col('Flow Inyeccion Prop.',m);
+    const cFR=col('Flow Retorno Prop.',m);
+
+    if(cDI){const v=avg(arr(cDI));const s=densStatus(v);kpis.push({l:`Dens. Inyec ${m}`,v:fmt(v,1),u:'kg/m³',s});}
+    if(cDR){const v=avg(arr(cDR));const s=densStatus(v);kpis.push({l:`Dens. Retor ${m}`,v:fmt(v,1),u:'kg/m³',s});}
+    if(cTI){const v=avg(arr(cTI));const s=tempStatus(v);kpis.push({l:`Temp. Inyec ${m}`,v:fmt(v,1),u:'°C',s});}
+    if(cSA){const v=avg(arr(cSA));const s=sasbStatus(v);kpis.push({l:`SA Inyec ${m}`,v:fmt(v,1),u:'',s});}
+    if(cER){const v=avg(arr(cER));const s=errorStatus(v);kpis.push({l:`Error Inyec ${m}`,v:fmt(v,2),u:'%',s});}
+    if(cFI&&cFR){
+      const fi=avg(arr(cFI)),fr=avg(arr(cFR));
+      const net=fi!==null&&fr!==null?fi-fr:null;
+      const s=net===null?'na':(net<0?'bad':(net>fi*0.5?'warn':'ok'));
+      kpis.push({l:`Consumo Neto ${m}`,v:fmt(net,1),u:'L/h',s});
+    }
+  }
+
+  // Remanencia
+  if(COLS.includes('Remanencia Total')){
+    const v=last(arr('Remanencia Total'));
+    kpis.push({l:'Remanencia Total',v:fmt(v,'locale'),u:'L',s:'neutral'});
+  }
+
+  for(const k of kpis){
+    grid.innerHTML+=`<div class="kpi ${k.s}">
+      <div class="klabel">${k.l}</div>
+      <div class="kval">${k.v} <span style="font-size:11px;font-weight:400;color:var(--muted)">${k.u}</span></div>
+      <div class="kstatus">${statusLabel(k.s)}</div>
+    </div>`;
+  }
+
+  // Audit table
+  renderAuditTable();
+}
+
+function renderAuditTable(){
+  const wrap=document.getElementById('auditTableWrap');
+  const rows=[];
+  for(const m of MOTORS){
+    const cDI=col('Densidad Inyec. Prop.',m);
+    const cDR=col('Densidad Retor. Prop.',m);
+    const cTI=col('Temp. Inyeccion Prop.',m);
+    const cTR=col('Temp. Retorno Prop.',m);
+    const cSAI=col('SA Inyeccion Prop.',m);
+    const cSBI=col('SB Inyeccion Prop.',m);
+    const cDRI=col('DR Inyeccion Prop.',m);
+    const cFI=col('Flow Inyeccion Prop.',m);
+    const cFR=col('Flow Retorno Prop.',m);
+    const cER=col('Error Inyeccion Prop.',m);
+
+    function cell(c,statusFn,d=2){
+      if(!c) return '<td><span class="pill na">N/D</span></td>';
+      const v=avg(arr(c));
+      const s=statusFn(v);
+      return `<td>${fmt(v,d)} <span class="pill ${s}">${s==='ok'?'OK':s==='warn'?'⚠':s==='bad'?'✗':'—'}</span></td>`;
+    }
+
+    rows.push(`<tr>
+      <td><b>${m==='CNT'?'Central':m}</b></td>
+      ${cell(cDI,densStatus,1)}
+      ${cell(cDR,densStatus,1)}
+      ${cell(cTI,tempStatus,1)}
+      ${cell(cTR,tempStatus,1)}
+      ${cell(cSAI,sasbStatus,1)}
+      ${cell(cSBI,sasbStatus,1)}
+      ${cell(cDRI,v=>v===null?'na':'neutral',2)}
+      ${cell(cFI,v=>v===null?'na':'neutral',1)}
+      ${cell(cFR,v=>v===null?'na':'neutral',1)}
+      ${cell(cER,errorStatus,3)}
+    </tr>`);
+  }
+
+  wrap.innerHTML=`<div style="overflow-x:auto">
+  <table class="audit-table">
+    <thead><tr>
+      <th>Motor</th>
+      <th>Dens.Iny (kg/m³)</th><th>Dens.Ret (kg/m³)</th>
+      <th>Temp.Iny (°C)</th><th>Temp.Ret (°C)</th>
+      <th>SA Iny</th><th>SB Iny</th>
+      <th>DR Iny</th>
+      <th>Flow Iny (L/h)</th><th>Flow Ret (L/h)</th>
+      <th>Error Iny (%)</th>
+    </tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table></div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MOTOR SELECTOR
+// ═══════════════════════════════════════════════════════
+function buildMotorSel(){
+  const c=document.getElementById('motorSel');
+  c.innerHTML='<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;align-self:center">Motor:</span>';
+  for(const m of MOTORS){
+    const btn=document.createElement('button');
+    btn.className='mselbtn'+(m===activeMotor?' active':'');
+    btn.textContent=m==='CNT'?'Central':m;
+    btn.onclick=()=>{
+      activeMotor=m;
+      document.querySelectorAll('.mselbtn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderActiveTab();
+    };
+    c.appendChild(btn);
+  }
+  if(!MOTORS.includes(activeMotor)) activeMotor=MOTORS[0]||'BR';
+}
+
+// ═══════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════
+const TAB_DEFS=[
+  {id:'resumen',label:'📅 Resumen Diario'},
+  {id:'consumo',  label:'Consumo / RPM'},
+  {id:'densidad', label:'Densidad'},
+  {id:'temp',     label:'Temperatura'},
+  {id:'sasb',     label:'SA / SB'},
+  {id:'dr_frec',  label:'DR / Frec.'},
+  {id:'error',    label:'Errores'},
+  {id:'tanques',  label:'Tanques'},
+  {id:'tricor',   label:'⬡ Auditoría TRICOR'},
+  {id:'caudal',   label:'Caudalímetros vs Tanque'},
+  {id:'generadores', label:'Generadores'},
+  {id:'tripvol',     label:'Trip Volume'},
+  {id:'rack',        label:'Rack / Bypass / Estado'},
+  {id:'horasmaq',    label:'Horas Máquina'},
+  {id:'agua',        label:'Agua en Tanques'},
+];
+
+function buildTabs(){
+  const bar=document.getElementById('tabsBar');
+  const pc =document.getElementById('panelsContainer');
+  bar.innerHTML='';pc.innerHTML='';
+  for(const t of TAB_DEFS){
+    const btn=document.createElement('button');
+    btn.className='tab'+(t.id===activeTab?' active':'');
+    btn.textContent=t.label;btn.dataset.tab=t.id;
+    btn.onclick=()=>{
+      activeTab=t.id;
+      document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+      document.getElementById('panel_'+t.id).classList.add('active');
+      renderActiveTab();
+      setTimeout(()=>{const el=document.getElementById('ch_'+t.id);if(el)Plotly.Plots.resize(el);},60);
+    };
+    bar.appendChild(btn);
+    const div=document.createElement('div');
+    div.className='panel'+(t.id===activeTab?' active':'');
+    div.id='panel_'+t.id;
+    pc.appendChild(div);
+  }
+}
+
+function renderActiveTab(){
+  if(!fData) return;
+  if(activeTab==='resumen')  renderResumenDiario();
+  if(activeTab==='consumo')  renderConsumo();
+  if(activeTab==='densidad') renderDensidad();
+  if(activeTab==='temp')     renderTemp();
+  if(activeTab==='sasb')     renderSASB();
+  if(activeTab==='dr_frec')  renderDRFrec();
+  if(activeTab==='error')    renderError();
+  if(activeTab==='tanques')  renderTanques();
+  if(activeTab==='tricor')   renderTricor();
+  if(activeTab==='caudal')      renderCaudal();
+  if(activeTab==='generadores') renderGeneradores();
+  if(activeTab==='tripvol')     renderTripVolume();
+  if(activeTab==='rack')        renderRackBypass();
+  if(activeTab==='horasmaq')    renderHorasMaq();
+  if(activeTab==='agua')        renderAgua();
+  // Show/hide caudal config panel
+  const cfgC=document.getElementById('cfgCaudal');
+  if(cfgC) cfgC.style.display=(activeTab==='caudal'&&RAW?'block':'none');
+}
+
+// ═══════════════════════════════════════════════════════
+// LAYOUT BASE
+// ═══════════════════════════════════════════════════════
+const LB={
+  plot_bgcolor:'transparent',paper_bgcolor:'transparent',
+  font:{family:"'Courier New',monospace",size:11,color:'#6c757d'},
+  xaxis:{gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+  hovermode:'x unified',
+  hoverlabel:{bgcolor:'#161b22',bordercolor:'#30363d',font:{family:"'Courier New',monospace",size:11},namelength:-1},
+  margin:{t:40,r:80,b:55,l:75},
+  legend:{orientation:'h',y:1.08,x:0,font:{size:10},bgcolor:'transparent'},
+};
+function layout(extra={}){
+  return Object.assign({},LB,{
+    yaxis:Object.assign({gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},extra.yaxis||{}),
+    yaxis2:Object.assign({overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10}},extra.yaxis2||{}),
+  },extra);
+}
+
+const COLORS_M={BR:'#58a6ff',STB:'#f0883e',CNT:'#bc8cff',Central:'#bc8cff'};
+const COLORS_PAIR=['#58a6ff','#3fb950','#f0883e','#bc8cff','#f85149','#d29922','#39d353','#8b949e'];
+
+function trace(col,name,color,yaxis='y',dash='solid'){
+  return{x:fData.ts,y:arr(col),name,mode:'lines',yaxis,line:{color,width:1.5,dash},hovertemplate:name+': %{y}<extra></extra>'};
+}
+
+// Context-aware trace — noteFn maps each value to a diagnostic string
+function traceCtx(c,name,color,yaxis,dash,noteFn){
+  if(!c) return null;
+  const y=arr(c);
+  const cd=y.map(v=>noteFn(v));
+  return{x:fData.ts,y,name,mode:'lines',yaxis:yaxis||'y',
+         line:{color,width:1.5,dash:dash||'solid'},
+         customdata:cd,
+         hovertemplate:'<b>'+name+'</b><br>%{customdata}<extra></extra>'};
+}
+
+// Diagnostic note functions (shared across all tabs)
+function _errNote(v){
+  if(v===null||isNaN(v)) return '—';
+  const a=Math.abs(v);
+  if(a>2)   return v.toFixed(3)+'% ✗ ERROR CRÍTICO';
+  if(a>0.5) return v.toFixed(3)+'% ⚠ Fuera de rango';
+  return       v.toFixed(3)+'% ✓ Normal';
+}
+function _densNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v<500||v>1200) return v.toFixed(1)+' kg/m³ ✗ INVÁLIDO — aire/cavitación';
+  if(v<810||v>890)  return v.toFixed(1)+' kg/m³ ⚠ Fuera rango diesel (810–890)';
+  return                  v.toFixed(1)+' kg/m³ ✓ Diesel normal';
+}
+function _flowNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v<0)   return v.toFixed(2)+' L/h ✗ FLUJO NEGATIVO — reflujo/error';
+  if(v===0) return '0.00 L/h ⚠ Flujo cero — motor parado o fallo';
+  return          v.toFixed(2)+' L/h ✓ Normal';
+}
+function _flowRateNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v<0)  return v.toFixed(2)+' L/h ✗ Negativo';
+  return         v.toFixed(2)+' L/h';
+}
+function _rpmNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v<=0) return v.toFixed(0)+' RPM ⚠ Motor parado';
+  return         v.toFixed(0)+' RPM';
+}
+function _sasbNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v<50)  return v.toFixed(1)+' ✗ SEÑAL CRÍTICA — aire o tubo no lleno';
+  if(v<70)  return v.toFixed(1)+' ⚠ Señal débil — posible perturbación';
+  return          v.toFixed(1)+' ✓ Señal OK';
+}
+function _tempNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v<0||v>120) return v.toFixed(1)+'°C ✗ Valor inválido';
+  if(v<20||v>70) return v.toFixed(1)+'°C ⚠ Fuera rango normal (20–70°C)';
+  return               v.toFixed(1)+'°C ✓ Normal';
+}
+function _drNote(v){
+  if(v===null||isNaN(v)) return '—';
+  if(v>80)  return v.toFixed(2)+' ✗ DR MUY ALTO — transmisor forzado';
+  if(v>50)  return v.toFixed(2)+' ⚠ DR elevado — esfuerzo extra';
+  return          v.toFixed(2)+' ✓ Normal';
+}
+function _frecNote(v){
+  if(v===null||isNaN(v)) return '—';
+  return v.toFixed(2)+' Hz';
+}
+
+function plotIn(tabId,traces,lay,height=420){
+  const div=document.getElementById('panel_'+tabId);
+  div.innerHTML=`<div class="chart-box"><div id="ch_${tabId}" style="height:${height}px"></div></div>`;
+  Plotly.react('ch_'+tabId,traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER TABS
+// ═══════════════════════════════════════════════════════
+function renderConsumo(){
+  const m=activeMotor;
+  const cFI=col('Flow Inyeccion Prop.',m);
+  const cFR=col('Flow Retorno Prop.',m);
+  const cFt=col('Flow Rate Prop.',m);
+  const cRPM=col('RPM Prop.',m)||'RPM Prop. Central';
+  const traces=[];
+  const c=COLORS_M[m]||'#58a6ff';
+  if(cFI) traces.push(traceCtx(cFI,'Flow Inyección',c,'y','solid',_flowNote));
+  if(cFR) traces.push(traceCtx(cFR,'Flow Retorno','#3fb950','y','dot',_flowNote));
+  if(cFt) traces.push(traceCtx(cFt,'Flow Rate','#d29922','y','dash',_flowRateNote));
+  if(COLS.includes(cRPM)) traces.push(traceCtx(cRPM,'RPM','#f85149','y2','solid',_rpmNote));
+  plotIn('consumo',traces,layout({
+    title:{text:`Consumo / RPM — Motor ${m==='CNT'?'Central':m}`,font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Flow [L/h]',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'RPM',font:{size:11,color:'#f85149'}},overlaying:'y',side:'right',tickfont:{size:10,color:'#f85149'},gridcolor:'transparent',zerolinecolor:'transparent'},
+  }));
+}
+
+function renderDensidad(){
+  const m=activeMotor;
+  const cDI=col('Densidad Inyec. Prop.',m);
+  const cDR=col('Densidad Retor. Prop.',m);
+  const traces=[];
+  if(cDI) traces.push(traceCtx(cDI,'Dens. Inyección','#58a6ff','y','solid',_densNote));
+  if(cDR) traces.push(traceCtx(cDR,'Dens. Retorno','#3fb950','y','dot',_densNote));
+  // Reference lines as shapes
+  const shapes=[
+    {type:'line',x0:fData.ts[0],x1:fData.ts[fData.ts.length-1],y0:DIESEL_DENS_MIN,y1:DIESEL_DENS_MIN,line:{color:'rgba(210,153,34,.5)',width:1,dash:'dot'}},
+    {type:'line',x0:fData.ts[0],x1:fData.ts[fData.ts.length-1],y0:DIESEL_DENS_MAX,y1:DIESEL_DENS_MAX,line:{color:'rgba(210,153,34,.5)',width:1,dash:'dot'}},
+  ];
+  const lay=layout({
+    title:{text:`Densidad — Motor ${m==='CNT'?'Central':m} (rango diesel 810–890 kg/m³)`,font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Densidad [kg/m³]',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    shapes,
+  });
+  delete lay.yaxis2;
+  plotIn('densidad',traces,lay);
+}
+
+function renderTemp(){
+  const m=activeMotor;
+  const cTI=col('Temp. Inyeccion Prop.',m);
+  const cTR=col('Temp. Retorno Prop.',m);
+  const traces=[];
+  if(cTI) traces.push(traceCtx(cTI,'Temp. Inyección','#f0883e','y','solid',_tempNote));
+  if(cTR) traces.push(traceCtx(cTR,'Temp. Retorno','#f85149','y','dot',_tempNote));
+  const shapes=[
+    {type:'rect',xref:'paper',x0:0,x1:1,y0:DIESEL_TEMP_MIN,y1:DIESEL_TEMP_MAX,fillcolor:'rgba(63,185,80,.06)',line:{width:0}},
+  ];
+  const lay=layout({
+    title:{text:`Temperatura — Motor ${m==='CNT'?'Central':m} (normal 30–60°C)`,font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Temperatura [°C]',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    shapes,
+  });
+  delete lay.yaxis2;
+  plotIn('temp',traces,lay);
+}
+
+function renderSASB(){
+  const m=activeMotor;
+  const cs=[
+    [col('SA Inyeccion Prop.',m),'SA Inyección','#58a6ff'],
+    [col('SB Inyeccion Prop.',m),'SB Inyección','#3fb950'],
+    [col('SA Retorno Prop.',m), 'SA Retorno',  '#f0883e'],
+    [col('SB Retorno Prop.',m), 'SB Retorno',  '#bc8cff'],
+  ].filter(([c])=>c);
+  const traces=cs.map(([c,n,color])=>traceCtx(c,n,color,'y','solid',_sasbNote));
+  // Warning line at 70
+  const shapes=[
+    {type:'line',xref:'paper',x0:0,x1:1,y0:70,y1:70,line:{color:'rgba(210,153,34,.6)',width:1,dash:'dot'}},
+    {type:'line',xref:'paper',x0:0,x1:1,y0:50,y1:50,line:{color:'rgba(248,81,73,.6)',width:1,dash:'dot'}},
+  ];
+  const lay=layout({
+    title:{text:`SA / SB — Motor ${m==='CNT'?'Central':m} (⚠<70  ✗<50)`,font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Amplitud señal',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    shapes,
+  });
+  delete lay.yaxis2;
+  plotIn('sasb',traces,lay);
+}
+
+function renderDRFrec(){
+  const m=activeMotor;
+  const cDI=col('DR Inyeccion Prop.',m);
+  const cDR=col('DR Retorno Prop.',m);
+  const cFI=col('Frec. Inyeccion Prop.',m);
+  const cFR=col('Frec. Retorno Prop.',m);
+  const traces=[];
+  if(cDI) traces.push(traceCtx(cDI,'DR Inyección','#58a6ff','y','solid',_drNote));
+  if(cDR) traces.push(traceCtx(cDR,'DR Retorno','#3fb950','y','dot',_drNote));
+  if(cFI) traces.push(traceCtx(cFI,'Frec. Inyección','#f0883e','y2','solid',_frecNote));
+  if(cFR) traces.push(traceCtx(cFR,'Frec. Retorno','#bc8cff','y2','dot',_frecNote));
+  plotIn('dr_frec',traces,layout({
+    title:{text:`DR / Frecuencia — Motor ${m==='CNT'?'Central':m}`,font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Drive Ratio',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'Frecuencia [Hz]',font:{size:11,color:'#f0883e'}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:'#f0883e'}},
+  }));
+}
+
+function renderError(){
+  const m=activeMotor;
+  const cEI=col('Error Inyeccion Prop.',m);
+  const cER=col('Error Retorno Prop.',m);
+  const traces=[];
+  if(cEI) traces.push(traceCtx(cEI,'Error Inyección','#f85149','y','solid',_errNote));
+  if(cER) traces.push(traceCtx(cER,'Error Retorno','#d29922','y','dot',_errNote));
+  const shapes=[
+    {type:'rect',xref:'paper',x0:0,x1:1,y0:-ERROR_THRESH,y1:ERROR_THRESH,fillcolor:'rgba(63,185,80,.07)',line:{width:0}},
+  ];
+  const lay=layout({
+    title:{text:`Errores de medición — Motor ${m==='CNT'?'Central':m} (zona verde = normal ±${ERROR_THRESH}%)`,font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Error [%]',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    shapes,
+  });
+  delete lay.yaxis2;
+  plotIn('error',traces,lay);
+}
+
+function renderTanques(){
+  const div=document.getElementById('panel_tanques');
+  const tkBR=tkCols('BR'), tkSTB=tkCols('STB'), tkCTR=detectTKCenterCols(COLS);
+  const remCol=detectRemCol(COLS);
+  const tkRem=!!remCol;
+  const allTK=[...tkBR,...tkSTB,...tkCTR];
+  if(!allTK.length&&!tkRem){div.innerHTML='<p style="padding:2rem;color:var(--muted);font-size:12px">No se encontraron columnas de tanques en este archivo.</p>';return;}
+
+  const traces=[];
+  tkBR.forEach((c,i)=>traces.push(trace(c,c,COLORS_PAIR[i%COLORS_PAIR.length])));
+  tkSTB.forEach((c,i)=>traces.push(trace(c,c,COLORS_PAIR[(i+tkBR.length)%COLORS_PAIR.length],'y','dot')));
+  tkCTR.forEach((c,i)=>traces.push(trace(c,c,COLORS_PAIR[(i+tkBR.length+tkSTB.length)%COLORS_PAIR.length],'y','dashdot')));
+  if(tkRem&&remCol) traces.push(trace(remCol,remCol,'#3fb950','y2'));
+
+  const lay=layout({
+    title:{text:'Tanques vs Tiempo',font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Litros',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'Remanencia [L]',font:{size:11,color:'#3fb950'}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:'#3fb950'}},
+    margin:{t:40,r:90,b:55,l:75},
+  });
+  div.innerHTML=`<div class="chart-box"><div id="ch_tanques" style="height:480px"></div></div>`;
+  Plotly.react('ch_tanques',traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ═══════════════════════════════════════════════════════
+// UI EVENTS
+// ═══════════════════════════════════════════════════════
+function showAlert(msg,type){
+  const el=document.getElementById('alertBar');
+  el.className='alert-bar '+type;el.textContent=msg;el.style.display='block';
+}
+function hideAlert(){document.getElementById('alertBar').style.display='none';}
+
+function clearAll(){
+  RAW=null;fData=null;COLS=[];MOTORS=[];dayIndex=[];
+  document.getElementById('dropzone').className='dropzone';
+  document.getElementById('dropzone').querySelector('.dz-icon').textContent='⬕';
+  document.getElementById('dropzone').querySelector('h2').textContent='Arrastrá o hacé click para cargar un CSV';
+  document.getElementById('dropzone').querySelector('p').textContent='Compatible con cualquier barco · detecta columnas automáticamente';
+  document.getElementById('slicePanel').style.display='none';
+  document.getElementById('kpiSection').style.display='none';
+  document.getElementById('tabsWrap').style.display='none';
+  document.getElementById('motorSel').style.display='none';
+  document.getElementById('rowBadge').textContent='Sin datos';
+  currentFilenames=[];
+  const fb2=document.getElementById('filenameBadge'); if(fb2) fb2.style.display='none';
+  const fd2=document.getElementById('filenameDisplay'); if(fd2) fd2.style.display='none';
+  const ft2=document.getElementById('filenameText'); if(ft2) ft2.textContent='';
+  const fm2=document.getElementById('filenameMeta'); if(fm2) fm2.textContent='';
+  document.getElementById('btnPdf').disabled=true;
+  document.getElementById('btnCsv').disabled=true;
+  document.getElementById('btnXlsx').disabled=true;
+  const cfgC2=document.getElementById('cfgCaudal'); if(cfgC2) cfgC2.style.display='none';
+  caudParsed=null;
+  caudConfig=null;
+  document.getElementById('vesselBadge').style.display='none';
+  document.getElementById('panelsContainer').innerHTML='';
+  document.getElementById('tabsBar').innerHTML='';
+  document.getElementById('kpiGrid').innerHTML='';
+  document.getElementById('auditTableWrap').innerHTML='';
+  document.getElementById('quickBtns').querySelectorAll('.qbtn').forEach(b=>b.remove());
+  hideAlert();
+}
+
+function addMoreCSV(){document.getElementById('addCsvInput').click();}
+document.getElementById('addCsvInput').addEventListener('change',function(e){
+  if(e.target.files.length) loadFiles(e.target.files);
+  e.target.value='';
+});
+
+// Dropzone events
+const dz=document.getElementById('dropzone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');loadFiles(e.dataTransfer.files);});
+document.getElementById('csvInput').addEventListener('change',function(e){
+  if(e.target.files.length) loadFiles(e.target.files);
+  e.target.value='';
+});
+
+// ═══════════════════════════════════════════════════════
+// AUDITORÍA TRICOR
+// ═══════════════════════════════════════════════════════
+function renderTricor(){
+  const m = activeMotor;
+  const div = document.getElementById('panel_tricor');
+  if(!div) return;
+
+  // Collect available cols for this motor
+  const cEI  = col('Error Inyeccion Prop.',  m);
+  const cFI  = col('Flow Inyeccion Prop.',   m);
+  const cDI  = col('Densidad Inyec. Prop.',  m);
+  const cSAI = col('SA Inyeccion Prop.',     m);
+  const cSBI = col('SB Inyeccion Prop.',     m);
+  const cFrI = col('Frec. Inyeccion Prop.',  m);
+  const cDRI = col('DR Inyeccion Prop.',     m);
+  const cTI  = col('Temp. Inyeccion Prop.',  m);
+
+  const ts = fData.ts;
+
+  // ── helpers ──
+  const LAYOUT_TRICOR = {
+    plot_bgcolor:'transparent', paper_bgcolor:'transparent',
+    font:{family:"'Courier New',monospace", size:11, color:'#6c757d'},
+    hovermode:'x unified',
+    hoverlabel:{bgcolor:'#161b22', bordercolor:'#30363d',
+                font:{family:"'Courier New',monospace", size:11}, namelength:-1},
+    margin:{t:54,r:95,b:55,l:80},
+    legend:{orientation:'h', y:1.12, x:0, font:{size:10}, bgcolor:'transparent'},
+    xaxis:{gridcolor:'#e8ecef', zerolinecolor:'#e8ecef',
+           tickfont:{size:10}, title:{text:'Tiempo', font:{size:11}}},
+  };
+
+  function yax(title,color){
+    return {title:{text:title,font:{size:11,color:color||'#8b949e'}},
+            gridcolor:'#e8ecef', zerolinecolor:'#e8ecef',
+            tickfont:{size:10,color:color||'#8b949e'}};
+  }
+  function yax2(title,color){
+    return {title:{text:title,font:{size:11,color:color}},
+            overlaying:'y', side:'right', gridcolor:'transparent',
+            zerolinecolor:'transparent', tickfont:{size:10,color:color}};
+  }
+
+  // Tooltip enricher — adds context note per point
+  function enrichTooltip(yArr, threshFn){
+    return yArr.map(v => threshFn(v));
+  }
+
+  function errorNote(v){
+    if(v===null||isNaN(v)) return '—';
+    const a=Math.abs(v);
+    if(a>2)   return `${v.toFixed(3)}% ✗ ERROR CRÍTICO`;
+    if(a>0.5) return `${v.toFixed(3)}% ⚠ Fuera de rango`;
+    return       `${v.toFixed(3)}% ✓ Normal`;
+  }
+  function densNote(v){
+    if(v===null||isNaN(v)) return '—';
+    if(v<500||v>1200) return `${v.toFixed(1)} kg/m³ ✗ MEDICIÓN INVÁLIDA (aire/cavitación)`;
+    if(v<810||v>890)  return `${v.toFixed(1)} kg/m³ ⚠ Fuera rango diesel (810-890)`;
+    return                  `${v.toFixed(1)} kg/m³ ✓ Rango diesel normal`;
+  }
+  function flowNote(v){
+    if(v===null||isNaN(v)) return '—';
+    if(v<0)   return `${v.toFixed(2)} L/h ✗ FLUJO NEGATIVO (reflujo/error)`;
+    if(v===0) return `${v.toFixed(2)} L/h ⚠ Flujo cero (motor parado o fallo)`;
+    return          `${v.toFixed(2)} L/h ✓ Flujo normal`;
+  }
+  function sasbNote(v){
+    if(v===null||isNaN(v)) return '—';
+    if(v<50)  return `${v.toFixed(1)} ✗ SEÑAL CRÍTICA (aire/tubo no lleno)`;
+    if(v<70)  return `${v.toFixed(1)} ⚠ Señal débil (posible perturbación)`;
+    return          `${v.toFixed(1)} ✓ Señal OK`;
+  }
+  function frecNote(v){
+    if(v===null||isNaN(v)) return '—';
+    return `${v.toFixed(2)} Hz`;
+  }
+  function drNote(v){
+    if(v===null||isNaN(v)) return '—';
+    if(v>80)  return `${v.toFixed(2)} ✗ DR MUY ALTO (esfuerzo extremo del transmisor)`;
+    if(v>50)  return `${v.toFixed(2)} ⚠ DR elevado`;
+    return          `${v.toFixed(2)} ✓ Normal`;
+  }
+
+  function mkTrace(c, name, color, yaxis, noteFn, dash='solid'){
+    if(!c) return null;
+    const y = fData[c]||[];
+    const customdata = y.map(v => noteFn(v));
+    return {
+      x: ts, y, name, mode:'lines', yaxis,
+      line:{color, width:1.5, dash},
+      customdata,
+      hovertemplate: `<b>${name}</b><br>%{customdata}<extra></extra>`,
+    };
+  }
+
+  // reference band shape
+  function bandShape(y0,y1,color){
+    return {type:'rect',xref:'paper',x0:0,x1:1,y0,y1,
+            fillcolor:color||'rgba(63,185,80,.07)',line:{width:0}};
+  }
+  function hline(y0,color,dash='dot'){
+    if(!fData.ts.length) return null;
+    return {type:'line',xref:'paper',x0:0,x1:1,y0,y1:y0,
+            line:{color,width:1,dash}};
+  }
+
+  // ────────────────────────────────────────────────────
+  // GRÁFICO A — Error + Flow + Densidad
+  // ────────────────────────────────────────────────────
+  const tracesA = [
+    mkTrace(cEI, `Error Inyec ${m}`,  '#f85149', 'y',  errorNote),
+    mkTrace(cFI, `Flow Inyec ${m}`,   '#58a6ff', 'y2', flowNote,  'dot'),
+    mkTrace(cDI, `Densidad Inyec ${m}`,'#d29922','y3', densNote,  'dash'),
+  ].filter(Boolean);
+
+  const shapesA = [];
+  if(hline(0.5,'rgba(248,81,73,.5)'))  shapesA.push(hline( 0.5,'rgba(248,81,73,.5)'));
+  if(hline(-0.5,'rgba(248,81,73,.5)')) shapesA.push(hline(-0.5,'rgba(248,81,73,.5)'));
+
+  const layoutA = Object.assign({}, LAYOUT_TRICOR, {
+    title:{text:`Gráfico A — Error · Flow · Densidad (Motor ${m==='CNT'?'Central':m})`,
+           font:{size:12,color:'#1a1f2e'},x:0},
+    yaxis:  yax(`Error Inyec [%]`,'#f85149'),
+    yaxis2: yax2(`Flow Inyec [L/h]`,'#58a6ff'),
+    yaxis3: {title:{text:`Densidad [kg/m³]`,font:{size:11,color:'#d29922'}},
+             overlaying:'y',side:'right',position:1,
+             gridcolor:'transparent',zerolinecolor:'transparent',
+             tickfont:{size:10,color:'#d29922'}},
+    shapes: shapesA,
+    annotations:[
+      {xref:'paper',yref:'paper',x:1.01,y:0.5,text:'← Densidad',
+       showarrow:false,font:{size:9,color:'#d29922'},textangle:-90},
+    ],
+  });
+
+  // ────────────────────────────────────────────────────
+  // GRÁFICO B — Error + SA + SB
+  // ────────────────────────────────────────────────────
+  const tracesB = [
+    mkTrace(cEI,  `Error Inyec ${m}`, '#f85149','y',  errorNote),
+    mkTrace(cSAI, `SA Inyec ${m}`,    '#58a6ff','y2', sasbNote, 'dot'),
+    mkTrace(cSBI, `SB Inyec ${m}`,    '#3fb950','y2', sasbNote, 'dash'),
+  ].filter(Boolean);
+
+  const shapesB = [
+    bandShape(70,150,'rgba(63,185,80,.05)'),
+    bandShape(50,70, 'rgba(210,153,34,.07)'),
+    bandShape(0, 50, 'rgba(248,81,73,.07)'),
+  ];
+  if(hline(0.5,'rgba(248,81,73,.4)'))  shapesB.push(hline( 0.5,'rgba(248,81,73,.4)'));
+  if(hline(-0.5,'rgba(248,81,73,.4)')) shapesB.push(hline(-0.5,'rgba(248,81,73,.4)'));
+
+  const layoutB = Object.assign({}, LAYOUT_TRICOR, {
+    title:{text:`Gráfico B — Error · SA · SB (Motor ${m==='CNT'?'Central':m})`,
+           font:{size:12,color:'#1a1f2e'},x:0},
+    yaxis:  yax(`Error Inyec [%]`,'#f85149'),
+    yaxis2: Object.assign(yax2(`Amplitud señal`,'#58a6ff'),{
+      range:[0,150],
+    }),
+    shapes: shapesB,
+  });
+
+  // ────────────────────────────────────────────────────
+  // GRÁFICO C — Error + Frec + DR
+  // ────────────────────────────────────────────────────
+  const tracesC = [
+    mkTrace(cEI,  `Error Inyec ${m}`, '#f85149','y',  errorNote),
+    mkTrace(cFrI, `Frec. Inyec ${m}`, '#bc8cff','y2', frecNote, 'dot'),
+    mkTrace(cDRI, `DR Inyec ${m}`,    '#39d353','y3', drNote,   'dash'),
+  ].filter(Boolean);
+
+  const shapesC = [];
+  if(hline(0.5,'rgba(248,81,73,.5)'))  shapesC.push(hline( 0.5,'rgba(248,81,73,.5)'));
+  if(hline(-0.5,'rgba(248,81,73,.5)')) shapesC.push(hline(-0.5,'rgba(248,81,73,.5)'));
+
+  const layoutC = Object.assign({}, LAYOUT_TRICOR, {
+    title:{text:`Gráfico C — Error · Frecuencia · DR (Motor ${m==='CNT'?'Central':m})`,
+           font:{size:12,color:'#1a1f2e'},x:0},
+    yaxis:  yax(`Error Inyec [%]`,'#f85149'),
+    yaxis2: yax2(`Frecuencia [Hz]`,'#bc8cff'),
+    yaxis3: {title:{text:`Drive Ratio`,font:{size:11,color:'#39d353'}},
+             overlaying:'y',side:'right',position:1,
+             gridcolor:'transparent',zerolinecolor:'transparent',
+             tickfont:{size:10,color:'#39d353'}},
+    shapes: shapesC,
+  });
+
+  // ────────────────────────────────────────────────────
+  // GRÁFICO D — Scatter Temperatura vs Densidad
+  // ────────────────────────────────────────────────────
+  let tracesD = [];
+  let scatterAlertHtml = '';
+
+  if(cTI && cDI){
+    const tx = fData[cTI]||[], dy = fData[cDI]||[];
+    const allPts = ts.map((t,i)=>({t,temp:tx[i],dens:dy[i]}))
+                     .filter(p=>p.temp!==null&&p.dens!==null&&!isNaN(p.temp)&&!isNaN(p.dens));
+
+    // Separate invalid (extreme outliers) from plottable
+    const invalid  = allPts.filter(p=>p.dens<500||p.dens>1200);
+    const pts      = allPts.filter(p=>p.dens>=500&&p.dens<=1200);
+
+    // ── Alert box for invalid points ──────────────────
+    if(invalid.length){
+      const maxDens = Math.max(...invalid.map(p=>p.dens));
+      const minDens = Math.min(...invalid.map(p=>p.dens));
+      const examples = invalid.slice(0,3).map(p=>
+        `${p.t.replace('T',' ')} → ${p.dens.toLocaleString('es',{maximumFractionDigits:0})} kg/m³ @ ${p.temp.toFixed(1)}°C`
+      ).join('<br>');
+      scatterAlertHtml = `
+        <div style="background:#1c1217;border:1px solid #f85149;border-radius:5px;
+                    padding:12px 16px;margin-bottom:.75rem;font-size:11px">
+          <div style="color:#f85149;font-weight:700;margin-bottom:6px;font-size:12px">
+            ✗ ${invalid.length} MEDICIÓN${invalid.length>1?'ES':''} INVÁLIDA${invalid.length>1?'S':''} DETECTADA${invalid.length>1?'S':''} — excluidas del scatter
+          </div>
+          <div style="color:#8b949e;line-height:1.7">
+            Rango densidad inválida: <span style="color:#f85149">${minDens.toLocaleString('es',{maximumFractionDigits:0})} – ${maxDens.toLocaleString('es',{maximumFractionDigits:0})} kg/m³</span>
+            (esperado diesel: 810–890 kg/m³)<br>
+            Posibles causas: <b style="color:#e6edf3">tubo vacío · aire en línea · sensor sin flujo · arranque/parada</b><br>
+            <span style="color:#6e7681">Ejemplos:</span><br>
+            <span style="color:#f85149">${examples}</span>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:#6e7681">
+            Los puntos inválidos se muestran colapsados en el gráfico de tiempo (Densidad) para preservar escala.
+          </div>
+        </div>`;
+    }
+
+    // ── Build traces for valid points ──────────────────
+    // Split into 3 separate scatter traces so legend works cleanly
+    const ptsOk   = pts.filter(p=>p.dens>=810&&p.dens<=890);
+    const ptsWarn = pts.filter(p=>p.dens>=500&&p.dens<810||p.dens>890&&p.dens<=1200);
+
+    function mkScatterTrace(pArr, name, color){
+      if(!pArr.length) return null;
+      return {
+        x: pArr.map(p=>p.temp),
+        y: pArr.map(p=>p.dens),
+        mode:'markers', type:'scatter', name,
+        marker:{color, size:5, opacity:0.80, line:{color:'rgba(0,0,0,.25)',width:0.5}},
+        customdata: pArr.map(p=>
+          `${p.t.replace('T',' ')}<br>Temp: ${p.temp.toFixed(1)}°C<br>Dens: ${_densNote(p.dens)}`),
+        hovertemplate:'%{customdata}<extra></extra>',
+      };
+    }
+
+    // Show invalid points collapsed at y=895 as red markers so they're visible
+    const ptsInvMarkers = invalid.length ? {
+      x: invalid.map(p=>p.temp),
+      y: invalid.map(p=>895),   // pinned just above normal band
+      mode:'markers', type:'scatter', name:'✗ Inválidos (colapsados)',
+      marker:{color:'#f85149', size:7, symbol:'x', opacity:0.9},
+      customdata: invalid.map(p=>
+        `${p.t.replace('T',' ')}<br>Temp: ${p.temp.toFixed(1)}°C<br>Dens REAL: ${p.dens.toLocaleString('es',{maximumFractionDigits:0})} kg/m³ ✗ INVÁLIDO<br>(punto colapsado para preservar escala)`),
+      hovertemplate:'%{customdata}<extra></extra>',
+    } : null;
+
+    tracesD = [
+      mkScatterTrace(ptsOk,   '✓ Rango diesel (810–890)', '#3fb950'),
+      mkScatterTrace(ptsWarn, '⚠ Fuera rango diesel',     '#d29922'),
+      ptsInvMarkers,
+    ].filter(Boolean);
+
+    if(!tracesD.length) tracesD = [{x:[],y:[],mode:'markers',type:'scatter',name:'Sin datos válidos',marker:{color:'#6c757d'}}];
+  }
+
+  const layoutD = {
+    plot_bgcolor:'transparent', paper_bgcolor:'transparent',
+    font:{family:"'Courier New',monospace",size:11,color:'#6c757d'},
+    title:{text:`Gráfico D — Temperatura vs Densidad Scatter (Motor ${m==='CNT'?'Central':m})`,
+           font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:{title:{text:'Temperatura [°C]',font:{size:11}},
+           gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis:{title:{text:'Densidad [kg/m³]',font:{size:11}},
+           gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10},
+           range:[700,950]},
+    hovermode:'closest',
+    hoverlabel:{bgcolor:'#161b22',bordercolor:'#30363d',
+                font:{family:"'Courier New',monospace",size:11}, namelength:-1},
+    margin:{t:54,r:30,b:60,l:80},
+    legend:{orientation:'h',y:1.12,x:0,font:{size:10},bgcolor:'transparent'},
+    shapes:[
+      {type:'rect',xref:'paper',x0:0,x1:1,y0:810,y1:890,
+       fillcolor:'rgba(63,185,80,.07)',line:{width:0}},
+      {type:'line',xref:'paper',x0:0,x1:1,y0:810,y1:810,
+       line:{color:'rgba(210,153,34,.5)',width:1,dash:'dot'}},
+      {type:'line',xref:'paper',x0:0,x1:1,y0:890,y1:890,
+       line:{color:'rgba(210,153,34,.5)',width:1,dash:'dot'}},
+    ],
+    annotations:[
+      {xref:'paper',yref:'y',x:0.01,y:850,text:'Rango diesel OK',
+       showarrow:false,font:{size:9,color:'rgba(63,185,80,.7)'},xanchor:'left'},
+    ],
+  };
+
+  // ────────────────────────────────────────────────────
+  // CONTEXT LEGEND BOX
+  // ────────────────────────────────────────────────────
+  const legendBox = `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:1rem">
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid #f85149;border-radius:5px;padding:10px 13px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#f85149;margin-bottom:6px">Error Inyección</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.6">
+        <span style="color:#3fb950">✓</span> Normal: |Error| ≤ 0.5%<br>
+        <span style="color:#d29922">⚠</span> Atención: 0.5% – 2%<br>
+        <span style="color:#f85149">✗</span> Crítico: |Error| &gt; 2%<br>
+        <span style="color:var(--muted);font-size:9px">Líneas punteadas rojas = umbral ±0.5%</span>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid #d29922;border-radius:5px;padding:10px 13px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#d29922;margin-bottom:6px">Densidad</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.6">
+        <span style="color:#3fb950">✓</span> Diesel normal: 810–890 kg/m³<br>
+        <span style="color:#d29922">⚠</span> Fuera rango: posible mezcla<br>
+        <span style="color:#f85149">✗</span> Inválido: &lt;500 o &gt;1200 → aire/cavitación
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid #58a6ff;border-radius:5px;padding:10px 13px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#58a6ff;margin-bottom:6px">SA / SB — Calidad de señal</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.6">
+        <span style="color:#3fb950">✓</span> OK: ≥ 70<br>
+        <span style="color:#d29922">⚠</span> Débil: 50–70 → posible perturbación<br>
+        <span style="color:#f85149">✗</span> Crítico: &lt; 50 → aire o tubo no lleno<br>
+        <span style="color:var(--muted);font-size:9px">Zonas coloreadas en Gráfico B</span>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid #39d353;border-radius:5px;padding:10px 13px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#39d353;margin-bottom:6px">DR / Frecuencia</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.6">
+        <span style="color:#3fb950">✓</span> DR normal: &lt; 50<br>
+        <span style="color:#d29922">⚠</span> DR elevado: 50–80 → esfuerzo extra<br>
+        <span style="color:#f85149">✗</span> DR &gt; 80 → transmisor forzado<br>
+        Frec. cambia con densidad y masa
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid #3fb950;border-radius:5px;padding:10px 13px">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#3fb950;margin-bottom:6px">Scatter Temp vs Densidad</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.6">
+        Nube compacta = medición estable<br>
+        Puntos dispersos = perturbación<br>
+        Tendencia negativa leve = normal en diesel<br>
+        <span style="color:var(--muted);font-size:9px">Banda verde = rango diesel 810–890 kg/m³</span>
+      </div>
+    </div>
+  </div>`;
+
+  // ────────────────────────────────────────────────────
+  // RENDER
+  // ────────────────────────────────────────────────────
+  const missing = [
+    !cEI&&'Error Inyección', !cFI&&'Flow Inyección',
+    !cDI&&'Densidad Inyección', !cSAI&&'SA', !cSBI&&'SB',
+    !cFrI&&'Frecuencia', !cDRI&&'DR', !cTI&&'Temperatura'
+  ].filter(Boolean);
+
+  const missingNote = missing.length
+    ? `<div style="font-size:10px;color:var(--yellow);background:#1a150a;border:1px solid var(--yellow);border-radius:4px;padding:6px 12px;margin-bottom:.75rem">
+        ⚠ Columnas no encontradas para motor ${m==='CNT'?'Central':m}: ${missing.join(', ')}
+       </div>` : '';
+
+  const OPTS = {responsive:true, displaylogo:false, displayModeBar:true,
+                modeBarButtonsToRemove:['lasso2d','select2d']};
+
+  div.innerHTML = missingNote + legendBox + `
+    <div class="chart-box" style="margin-bottom:.75rem"><div id="ch_tricor_A" style="height:400px"></div></div>
+    <div class="chart-box" style="margin-bottom:.75rem"><div id="ch_tricor_B" style="height:400px"></div></div>
+    <div class="chart-box" style="margin-bottom:.75rem"><div id="ch_tricor_C" style="height:400px"></div></div>
+    ` + scatterAlertHtml + `
+    <div class="chart-box" style="margin-bottom:.75rem"><div id="ch_tricor_D" style="height:420px"></div></div>
+  `;
+
+  Plotly.react('ch_tricor_A', tracesA, layoutA, OPTS);
+  Plotly.react('ch_tricor_B', tracesB, layoutB, OPTS);
+  Plotly.react('ch_tricor_C', tracesC, layoutC, OPTS);
+  if(tracesD.length) Plotly.react('ch_tricor_D', tracesD, layoutD, OPTS);
+  else document.getElementById('ch_tricor_D').innerHTML =
+    '<p style="padding:2rem;color:var(--muted);font-size:12px">No hay datos de Temperatura o Densidad para el scatter.</p>';
+}
+
+
+// ═══════════════════════════════════════════════════════
+// CAUDALÍMETROS vs TANQUE
+// ═══════════════════════════════════════════════════════
+let caudParsed = null;
+let caudConfig = null;  // persists column selection across slider moves
+
+function initCaudalSelectors(){
+  const selCaud = document.getElementById('selCaud');
+  const selTk   = document.getElementById('selTk');
+  if(!selCaud||!COLS.length) return;
+  // Auto-detect best columns using universal detectors
+  const bestCaud = detectCaudCol(COLS);
+  const bestRem  = detectRemCol(COLS);
+  function fill(sel, preferred){
+    sel.innerHTML='';
+    COLS.forEach(c=>{
+      const opt=document.createElement('option');
+      opt.value=c; opt.textContent=c;
+      if(c===preferred) opt.selected=true;
+      sel.appendChild(opt);
+    });
+  }
+  fill(selCaud, bestCaud||COLS[0]);
+  fill(selTk,   bestRem||COLS[0]);
+  // Show auto-detection result
+  const hint=document.getElementById('caudHint');
+  if(hint){
+    hint.textContent = bestCaud&&bestRem
+      ? `✓ Auto-detectado: "${bestCaud}" vs "${bestRem}"`
+      : '⚠ No se pudo auto-detectar — seleccioná manualmente';
+    hint.style.color = bestCaud&&bestRem?'var(--green)':'var(--yellow)';
+  }
+}
+
+function renderCaudal(){
+  initCaudalSelectors();
+  const div=document.getElementById('panel_caudal');
+  if(!div) return;
+  if(!caudParsed){
+    div.innerHTML='<p style="padding:2rem;color:var(--muted);font-size:12px">Configurá las columnas arriba y presioná <b style=\'color:var(--text)\'>Calcular</b>.</p>';
+    return;
+  }
+  renderCaudalChart();
+}
+
+function calcularCaudal(){
+  // Usa fData (ya filtrado por el slider) — nunca RAW completo
+  if(!fData||!fData.ts||!fData.ts.length){ return; }
+  const colCaud = document.getElementById('selCaud').value;
+  const colTk   = document.getElementById('selTk').value;
+  const umbral  = parseFloat(document.getElementById('inpUmbral').value)||0;
+
+  // Store column selection for auto-recalc on slider change
+  caudConfig={colCaud,colTk,umbral};
+
+  const ts   = fData.ts;
+  const cRaw = fData[colCaud]||[];
+  const tRaw = fData[colTk]||[];
+
+  // Build valid pairs — only rows where both columns have data
+  const filas=[];
+  for(let i=0;i<ts.length;i++){
+    const c=cRaw[i], k=tRaw[i];
+    if(c!==null&&k!==null&&!isNaN(c)&&!isNaN(k))
+      filas.push({t:ts[i],c,k});
+  }
+  if(filas.length<2){
+    const div=document.getElementById('panel_caudal');
+    if(div) div.innerHTML='<p style="padding:2rem;color:#f85149;font-size:12px">⚠ No hay suficientes filas válidas con ambas columnas en el rango seleccionado.</p>';
+    return;
+  }
+
+  const caud  = filas.map(r=>r.c);
+  const tk    = filas.map(r=>r.k);
+  const tsArr = filas.map(r=>r.t);
+
+  // CAUD acumulado desde 0 (referenciado al primer punto del slice)
+  const caud0=caud[0];
+  const CAUD=caud.map(v=>v-caud0);
+
+  // TK consumo acumulado — detección automática de bunker (≥10.000 L en ≤1h)
+  const BUNKER_MIN_L=10000, BUNKER_MAX_H=1;
+  const tk0=tk[0];
+  const TK=new Array(tk.length);
+  const bunkerEvents=[];
+  let offset=0, prev=tk0;
+  TK[0]=0;
+  for(let i=1;i<tk.length;i++){
+    const d=tk[i]-prev;
+    const dtH=(new Date(tsArr[i]).getTime()-new Date(tsArr[i-1]).getTime())/3600000;
+    if(d>=BUNKER_MIN_L&&dtH<=BUNKER_MAX_H){
+      offset+=d;
+      bunkerEvents.push({t:tsArr[i],amount:Math.round(d)});
+    }
+    TK[i]=tk0-tk[i]+offset;
+    prev=tk[i];
+  }
+
+  const DIFF=TK.map((v,i)=>v-CAUD[i]);
+  caudParsed={ts:tsArr,CAUD,TK,DIFF,colCaud,colTk,umbral,bunkerEvents,
+              rangeFrom:tsArr[0],rangeTo:tsArr[tsArr.length-1]};
+  renderCaudalChart();
+}
+
+function renderCaudalChart(){
+  const div=document.getElementById('panel_caudal');
+  if(!div||!caudParsed) return;
+  const {ts,CAUD,TK,DIFF,colCaud,colTk}=caudParsed;
+
+  function fmtN(v){return v===null||isNaN(v)?'—':v.toLocaleString('es',{maximumFractionDigits:0});}
+  const {bunkerEvents=[]}=caudParsed;
+  const totalBunker=bunkerEvents.reduce((a,b)=>a+b.amount,0);
+  const finalC=CAUD[CAUD.length-1],finalT=TK[TK.length-1],finalD=DIFF[DIFF.length-1];
+  const diffAbs=Math.abs(finalD);
+  const diffPct=finalC>0?(diffAbs/finalC*100):0;
+  const diffStatus=diffPct<2?'ok':diffPct<5?'warn':'bad';
+  const diffLabel=diffStatus==='ok'?'✓ Balance aceptable':diffStatus==='warn'?'⚠ Diferencia notable':'✗ Diferencia significativa';
+
+  // KPI cards
+  const kpiHtml=`
+    <div class="kpi-grid" style="margin-bottom:.75rem">
+      <div class="kpi caud">
+        <div class="klabel">CAUD acumulado</div>
+        <div class="kval">${fmtN(finalC)} <span style="font-size:11px;font-weight:400;color:var(--muted)">L</span></div>
+        <div class="ksub">${colCaud}</div>
+      </div>
+      <div class="kpi tk">
+        <div class="klabel">TK consumo acumulado</div>
+        <div class="kval">${fmtN(finalT)} <span style="font-size:11px;font-weight:400;color:var(--muted)">L</span></div>
+        <div class="ksub">${colTk} (con recargas)</div>
+      </div>
+      <div class="kpi ${diffStatus}">
+        <div class="klabel">DIFF = TK − CAUD</div>
+        <div class="kval">${fmtN(finalD)} <span style="font-size:11px;font-weight:400;color:var(--muted)">L</span></div>
+        <div class="kstatus">${diffLabel} (${diffPct.toFixed(1)}%)</div>
+      </div>
+      <div class="kpi neutral">
+        <div class="klabel">Período analizado (slider)</div>
+        <div class="kval" style="font-size:12px">${ts[0].replace('T',' ')}</div>
+        <div class="ksub">→ ${ts[ts.length-1].replace('T',' ')}<br>${ts.length.toLocaleString('es')} registros en rango</div>
+      </div>
+      ${bunkerEvents.length?`<div class="kpi warn">
+        <div class="klabel">Bunker detectado</div>
+        <div class="kval">${fmtN(totalBunker)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div>
+        <div class="ksub">${bunkerEvents.length} evento(s) ≥10.000 L/h — excluidos del TK</div>
+      </div>`:''}
+    </div>`;
+
+  // Líneas verticales para bunker events
+  const bunkerShapes=bunkerEvents.map(b=>({
+    type:'line',xref:'x',yref:'paper',
+    x0:b.t,x1:b.t,y0:0,y1:1,
+    line:{color:'#f2c80f',width:2,dash:'dot'}
+  }));
+  const bunkerAnnotations=bunkerEvents.map(b=>({
+    x:b.t,yref:'paper',y:1.04,
+    text:`⛽ ${fmtN(b.amount)} L`,
+    showarrow:false,
+    font:{size:9,color:'#f2c80f',family:"'Courier New',monospace"},
+    bgcolor:'rgba(0,0,0,0.5)',borderpad:2
+  }));
+
+  const traces=[
+    {x:ts,y:CAUD,name:`CAUD — ${fmtN(finalC)} L`,type:'scatter',mode:'lines',
+     line:{color:'#f85149',width:2},
+     hovertemplate:'CAUD: %{y:,.0f} L<extra></extra>'},
+    {x:ts,y:TK,  name:`TK — ${fmtN(finalT)} L`,  type:'scatter',mode:'lines',
+     line:{color:'#58a6ff',width:2},
+     hovertemplate:'TK: %{y:,.0f} L<extra></extra>'},
+    {x:ts,y:DIFF,name:`DIFF — ${fmtN(finalD)} L`, type:'scatter',mode:'lines',
+     line:{color:'#3fb950',width:2},
+     hovertemplate:'DIFF: %{y:,.0f} L<extra></extra>'},
+    // Final value markers
+    {x:[ts[ts.length-1]],y:[finalC],type:'scatter',mode:'markers',showlegend:false,
+     marker:{symbol:'triangle-up',color:'#f85149',size:11},hoverinfo:'skip'},
+    {x:[ts[ts.length-1]],y:[finalT],type:'scatter',mode:'markers',showlegend:false,
+     marker:{symbol:'triangle-up',color:'#58a6ff',size:11},hoverinfo:'skip'},
+    {x:[ts[ts.length-1]],y:[finalD],type:'scatter',mode:'markers',showlegend:false,
+     marker:{symbol:'triangle-up',color:'#3fb950',size:11},hoverinfo:'skip'},
+  ];
+
+  const layout={
+    plot_bgcolor:'transparent',paper_bgcolor:'transparent',
+    font:{family:"'Courier New',monospace",size:11,color:'#6c757d'},
+    title:{text:`Caudalímetros vs Tanque — Balance de combustible`,
+           font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:{title:{text:'Tiempo',font:{size:11}},
+           gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis:{title:{text:'Litros acumulados',font:{size:11}},
+           gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    shapes:bunkerShapes,
+    annotations:bunkerAnnotations,
+    hovermode:'x unified',
+    hoverlabel:{bgcolor:'#161b22',bordercolor:'#30363d',
+                font:{family:"'Courier New',monospace",size:11},namelength:-1},
+    margin:{t:50,r:30,b:60,l:80},
+    legend:{orientation:'h',y:1.08,x:0,font:{size:10},bgcolor:'transparent'},
+  };
+
+  div.innerHTML=kpiHtml+
+    `<div class="chart-box"><div id="ch_caudal" style="height:460px"></div></div>`;
+  Plotly.react('ch_caudal',traces,layout,
+    {responsive:true,displaylogo:false,displayModeBar:true,
+     modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ═══════════════════════════════════════════════════════
+// EXPORT PDF
+// ═══════════════════════════════════════════════════════
+function exportPDF(){
+  const btn=document.getElementById('btnPdf');
+  btn.disabled=true; btn.textContent='⏳ Preparando...';
+
+  // Build a printable report in a new window
+  const fnames=currentFilenames.join(', ')||'—';
+  const now=new Date().toLocaleString('es');
+  const N=RAW?RAW.ts.length:0;
+  const rangeFrom=RAW&&RAW.ts.length?RAW.ts[0].replace('T',' '):'—';
+  const rangeTo  =RAW&&RAW.ts.length?RAW.ts[RAW.ts.length-1].replace('T',' '):'—';
+
+  // Collect KPI data
+  const kpiEl=document.getElementById('kpiGrid');
+  const kpiHtml=kpiEl?kpiEl.outerHTML:'';
+  const auditEl=document.getElementById('auditTableWrap');
+  const auditHtml=auditEl?auditEl.outerHTML:'';
+
+  // Collect caudal KPIs if available
+  const caudalPanel=document.getElementById('panel_caudal');
+  const caudalHtml=caudParsed&&caudalPanel?caudalPanel.querySelector('.kpi-grid')?.outerHTML||'':'';
+
+  const reportHtml=`<!DOCTYPE html><html lang="es"><head>
+<meta charset="UTF-8"/>
+<title>Informe — ${fnames}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Courier New',Consolas,monospace;font-size:11px;
+       color:#000;background:#fff;padding:2cm}
+  h1{font-size:16px;font-weight:700;margin-bottom:4px}
+  h2{font-size:13px;font-weight:600;margin:20px 0 8px;
+     border-bottom:2px solid #000;padding-bottom:4px}
+  h3{font-size:11px;font-weight:600;margin:14px 0 6px;color:#333}
+  .meta{font-size:10px;color:#555;margin-bottom:20px;line-height:1.8}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .kpi{border:1px solid #ccc;border-radius:4px;padding:8px 10px;
+       border-left:4px solid #000;background:#f9f9f9}
+  .kpi.ok{border-left-color:#2ea043}
+  .kpi.warn{border-left-color:#bf8700}
+  .kpi.bad{border-left-color:#cf222e}
+  .kpi.neutral{border-left-color:#666}
+  .kpi.caud{border-left-color:#cf222e}
+  .kpi.tk{border-left-color:#0969da}
+  .kpi.diff.ok{border-left-color:#2ea043}
+  .klabel{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#555;margin-bottom:3px}
+  .kval{font-size:16px;font-weight:700;line-height:1}
+  .ksub,.kstatus{font-size:9px;color:#555;margin-top:3px}
+  .kstatus.ok{color:#2ea043}.kstatus.warn{color:#bf8700}.kstatus.bad{color:#cf222e}
+  table{width:100%;border-collapse:collapse;font-size:10px}
+  th{background:#f0f0f0;padding:5px 8px;border:1px solid #ccc;
+     text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+  td{padding:5px 8px;border:1px solid #ddd}
+  tr:nth-child(even) td{background:#fafafa}
+  .pill{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700}
+  .pill.ok{background:#d1fae5;color:#065f46}
+  .pill.warn{background:#fef3c7;color:#92400e}
+  .pill.bad{background:#fee2e2;color:#991b1b}
+  .pill.na{background:#f3f4f6;color:#6b7280}
+  .page-break{page-break-before:always;padding-top:1cm}
+  footer{margin-top:30px;font-size:9px;color:#888;border-top:1px solid #ccc;padding-top:8px}
+  @media print{body{padding:1cm}.page-break{page-break-before:always}}
+</style>
+</head><body>
+  <div style="display:flex;align-items:baseline;gap:0;margin-bottom:6px">
+    <span style="font-size:28px;font-weight:900;color:#f47920;font-family:'Arial Black',Arial,sans-serif">ROCK</span><span style="font-size:28px;font-weight:300;color:#111;font-family:'Arial Black',Arial,sans-serif">tree</span>
+  </div>
+  <h1>Informe de Análisis de Combustible</h1>
+  <div class="meta">
+    <b>Archivo(s):</b> ${fnames}<br>
+    <b>Generado:</b> ${now}<br>
+    <b>Registros analizados:</b> ${N.toLocaleString('es')} filas<br>
+    <b>Período:</b> ${rangeFrom} → ${rangeTo}<br>
+    <b>Motores detectados:</b> ${MOTORS.join(', ')||'—'}
+  </div>
+
+  <h2>Auditoría de Calidad — KPIs por Variable</h2>
+  ${kpiHtml}
+
+  <h2>Tabla de Estado por Motor</h2>
+  ${auditHtml}
+
+  ${caudalHtml?`<div class="page-break"><h2>Balance Caudalímetros vs Tanque</h2>${caudalHtml}</div>`:''}
+
+  <footer>
+    Generado automáticamente por Analizador Universal de Combustible · ${now}
+  </footer>
+</body></html>`;
+
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(reportHtml);
+  w.document.close();
+  setTimeout(()=>{
+    w.focus();
+    w.print();
+    btn.disabled=false; btn.textContent='📄 Exportar PDF';
+  },800);
+}
+
+
+// ═══════════════════════════════════════════════════════
+// ROCKTREE-SPECIFIC TAB RENDERERS
+// ═══════════════════════════════════════════════════════
+
+function noDataMsg(tabId, msg){
+  const div=document.getElementById('panel_'+tabId);
+  if(div) div.innerHTML=`<p style="padding:2rem;color:var(--muted);font-size:12px">${msg||'No hay datos disponibles para este gráfico en el archivo cargado.'}</p>`;
+}
+
+// ── Generadores ──────────────────────────────────────────
+function renderGeneradores(){
+  const GEN_LABELS=['BR','STB','Aux','Proa','Popa'];
+  // Find all Flow Rate Gen. and Trip Volume Gen. columns
+  const frCols=COLS.filter(c=>c.startsWith('Flow Rate Gen.')||c==='Flow Rate Búnker');
+  const tvCols=COLS.filter(c=>c.startsWith('Trip Volume Gen.')||c==='Trip Volume Búnker');
+  if(!frCols.length&&!tvCols.length){noDataMsg('generadores','No se encontraron columnas de generadores (Flow Rate Gen. / Trip Volume Gen.)');return;}
+
+  const COLORS_G=['#58a6ff','#3fb950','#f0883e','#bc8cff','#f85149','#d29922','#39d353'];
+  const traces=[];
+  frCols.forEach((c,i)=>{
+    traces.push({x:fData.ts,y:fData[c]||[],name:c,mode:'lines',yaxis:'y',
+      line:{color:COLORS_G[i%COLORS_G.length],width:1.5},
+      hovertemplate:c+': %{y:.1f} L/h<extra></extra>'});
+  });
+  tvCols.forEach((c,i)=>{
+    traces.push({x:fData.ts,y:fData[c]||[],name:c,mode:'lines',yaxis:'y2',
+      line:{color:COLORS_G[(i+frCols.length)%COLORS_G.length],width:1.5,dash:'dot'},
+      hovertemplate:c+': %{y:,.0f} L<extra></extra>'});
+  });
+
+  const lay=Object.assign({},LB,{
+    title:{text:'Generadores — Flow Rate y Trip Volume',font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Flow Rate Gen [L/h]',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'Trip Volume Gen [L]',font:{size:11,color:'#f0883e'}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:'#f0883e'}},
+    margin:{t:50,r:90,b:55,l:75},
+    legend:{orientation:'h',y:1.10,x:0,font:{size:10},bgcolor:'transparent'},
+  });
+
+  const div=document.getElementById('panel_generadores');
+  div.innerHTML='<div class="chart-box"><div id="ch_generadores" style="height:460px"></div></div>';
+  Plotly.react('ch_generadores',traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ── Trip Volume (consumo acumulado por propulsor) ────────
+function renderTripVolume(){
+  const tvProp=COLS.filter(c=>c.startsWith('Trip Volume Prop.')||c.startsWith('Trip Volume Búnker'));
+  const tvGen =COLS.filter(c=>c.startsWith('Trip Volume Gen.'));
+  const tvIFO =COLS.filter(c=>c.startsWith('Trip IFO')||c.startsWith('Trip MGO'));
+  const tvParks=COLS.filter(c=>c.startsWith('Trip Parks'));
+  const all=[...tvProp,...tvGen,...tvIFO,...tvParks];
+  if(!all.length){noDataMsg('tripvol','No se encontraron columnas Trip Volume.');return;}
+
+  const COLORS_T=['#f85149','#58a6ff','#3fb950','#f0883e','#bc8cff','#d29922','#39d353','#8b949e'];
+  const traces=all.map((c,i)=>({
+    x:fData.ts, y:fData[c]||[], name:c, mode:'lines',
+    line:{color:COLORS_T[i%COLORS_T.length],width:1.5,dash:c.includes('Gen.')?'dot':'solid'},
+    hovertemplate:c+': %{y:,.0f} L<extra></extra>',
+  }));
+
+  // KPI: last value per col
+  function fmtN(v){return v===null||isNaN(v)?'—':v.toLocaleString('es',{maximumFractionDigits:0});}
+  const kpiHtml='<div class="kpi-grid" style="margin-bottom:.75rem">'+
+    all.map((c,i)=>{
+      const vals=(fData[c]||[]).filter(v=>v!==null&&!isNaN(v));
+      const last=vals.length?vals[vals.length-1]:null;
+      const first=vals.length?vals[0]:null;
+      const diff=last!==null&&first!==null?last-first:null;
+      return `<div class="kpi neutral" style="border-left-color:${COLORS_T[i%COLORS_T.length]}">
+        <div class="klabel">${c}</div>
+        <div class="kval">${fmtN(last)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div>
+        <div class="ksub">Δ período: ${fmtN(diff)} L</div>
+      </div>`;
+    }).join('')+'</div>';
+
+  const lay=Object.assign({},LB,{
+    title:{text:'Trip Volume — Consumo acumulado por propulsor/generador',font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Litros acumulados',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    margin:{t:50,r:30,b:55,l:80},
+    legend:{orientation:'h',y:1.10,x:0,font:{size:10},bgcolor:'transparent'},
+  });
+  delete lay.yaxis2;
+
+  const div=document.getElementById('panel_tripvol');
+  div.innerHTML=kpiHtml+'<div class="chart-box"><div id="ch_tripvol" style="height:440px"></div></div>';
+  Plotly.react('ch_tripvol',traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ── Rack / Bypass / Estado ───────────────────────────────
+function renderRackBypass(){
+  const rackCols  =COLS.filter(c=>c.startsWith('Rack '));
+  const bypassCols=COLS.filter(c=>c.startsWith('Bypass '));
+  const presionCols=COLS.filter(c=>c.startsWith('Presion Comb.'));
+  const estadoCol =COLS.includes('Estado')?'Estado':null;
+  if(!rackCols.length&&!bypassCols.length&&!estadoCol&&!presionCols.length){
+    noDataMsg('rack','No se encontraron columnas Rack, Bypass, Presión o Estado.');return;
+  }
+
+  const COLORS_R=['#58a6ff','#f0883e','#3fb950','#bc8cff','#f85149','#d29922'];
+  const traces=[];
+
+  rackCols.forEach((c,i)=>traces.push({
+    x:fData.ts,y:fData[c]||[],name:c,mode:'lines',yaxis:'y',
+    line:{color:COLORS_R[i%COLORS_R.length],width:1.5},
+    hovertemplate:c+': %{y:.3f}<extra></extra>',
+  }));
+
+  bypassCols.forEach((c,i)=>traces.push({
+    x:fData.ts,y:fData[c]||[],name:c,mode:'lines',yaxis:'y2',
+    line:{color:COLORS_R[(i+rackCols.length)%COLORS_R.length],width:1.5,dash:'dot'},
+    hovertemplate:c+': %{y:.0f} (0=normal 1=bypass)<extra></extra>',
+  }));
+
+  presionCols.forEach((c,i)=>traces.push({
+    x:fData.ts,y:fData[c]||[],name:c,mode:'lines',yaxis:'y2',
+    line:{color:COLORS_R[(i+rackCols.length+bypassCols.length)%COLORS_R.length],width:1.5,dash:'dashdot'},
+    hovertemplate:c+': %{y:.1f} bar<extra></extra>',
+  }));
+  if(estadoCol) traces.push({
+    x:fData.ts,y:fData[estadoCol]||[],name:'Estado',mode:'lines',yaxis:'y2',
+    line:{color:'#d29922',width:1.5,dash:'dash'},
+    hovertemplate:'Estado: %{y:.0f}<extra></extra>',
+  });
+
+  const lay=Object.assign({},LB,{
+    title:{text:'Rack Propulsor / Bypass / Estado',font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Rack (carga motor)',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'Bypass / Estado / Presión',font:{size:11,color:'#f0883e'}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:'#f0883e'}},
+    margin:{t:50,r:90,b:55,l:75},
+    legend:{orientation:'h',y:1.10,x:0,font:{size:10},bgcolor:'transparent'},
+    // Highlight bypass=1 regions
+    shapes: (()=>{
+      if(!bypassCols.length) return [];
+      // Reference line at 0.5 to visually separate 0/1
+      return [{type:'line',xref:'paper',x0:0,x1:1,y0:0.5,y1:0.5,yref:'y2',
+               line:{color:'rgba(248,81,73,.4)',width:1,dash:'dot'}}];
+    })(),
+  });
+
+  const div=document.getElementById('panel_rack');
+  div.innerHTML='<div class="chart-box"><div id="ch_rack" style="height:460px"></div></div>';
+  Plotly.react('ch_rack',traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ── Horas Máquina ────────────────────────────────────────
+function renderHorasMaq(){
+  const hmCols=COLS.filter(c=>
+    c.startsWith('Horas Maquina Prop')||c.startsWith('HM Prop')||
+    c.startsWith('Hora Maq.')||c.startsWith('HM Totales'));
+  if(!hmCols.length){noDataMsg('horasmaq','No se encontraron columnas de Horas Máquina en este archivo.');return;}
+
+  function fmtN(v){return v===null||isNaN(v)?'—':v.toLocaleString('es',{maximumFractionDigits:1});}
+  const COLORS_H=['#58a6ff','#f0883e','#3fb950'];
+
+  const hmPlottable=hmCols.filter(c=>c.startsWith('Horas Maquina Prop')||c.startsWith('Hora Maq.')||c.startsWith('HM Totales'));
+  const traces=hmPlottable.map((c,i)=>({
+    x:fData.ts,y:fData[c]||[],name:c,mode:'lines',
+    line:{color:COLORS_H[i%COLORS_H.length],width:2},
+    hovertemplate:c+': %{y:.2f} hs<extra></extra>',
+  }));
+
+  if(!traces.length){noDataMsg('horasmaq','Solo hay columnas HM en ticks — sin horas acumuladas legibles.');return;}
+
+  // KPIs
+  const kpiHtml='<div class="kpi-grid" style="margin-bottom:.75rem">'+
+    hmPlottable.map((c,i)=>{
+      const vals=(fData[c]||[]).filter(v=>v!==null&&!isNaN(v));
+      const first=vals.length?vals[0]:null;
+      const last=vals.length?vals[vals.length-1]:null;
+      const diff=first!==null&&last!==null?last-first:null;
+      return `<div class="kpi neutral" style="border-left-color:${COLORS_H[i%COLORS_H.length]}">
+        <div class="klabel">${c}</div>
+        <div class="kval">${fmtN(last)} <span style="font-size:10px;font-weight:400;color:var(--muted)">hs</span></div>
+        <div class="ksub">Δ período: ${fmtN(diff)} hs</div>
+      </div>`;
+    }).join('')+'</div>';
+
+  const lay=Object.assign({},LB,{
+    title:{text:'Horas Máquina — Propulsores',font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Horas acumuladas',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    margin:{t:50,r:30,b:55,l:80},
+    legend:{orientation:'h',y:1.08,x:0,font:{size:10},bgcolor:'transparent'},
+  });
+  delete lay.yaxis2;
+
+  const div=document.getElementById('panel_horasmaq');
+  div.innerHTML=kpiHtml+'<div class="chart-box"><div id="ch_horasmaq" style="height:420px"></div></div>';
+  Plotly.react('ch_horasmaq',traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+// ── Agua en Tanques ──────────────────────────────────────
+function renderAgua(){
+  const aguaCols=COLS.filter(c=>c.startsWith('Agua TK')||c.startsWith('Agua en TK'));
+  if(!aguaCols.length){noDataMsg('agua','No se encontraron columnas de agua en tanques (Agua TK…). Solo disponible para CAVALIER XV.');return;}
+
+  const COLORS_A=['#58a6ff','#3fb950','#f0883e','#bc8cff','#f85149','#d29922','#39d353','#8b949e'];
+  const traces=aguaCols.map((c,i)=>{
+    const y=fData[c]||[];
+    const cd=y.map(v=>{
+      if(v===null||isNaN(v)) return '—';
+      return v===1?`${c}: ✗ AGUA DETECTADA`:v===0?`${c}: ✓ Sin agua`:`${c}: ${v}`;
+    });
+    return{x:fData.ts,y,name:c,mode:'lines+markers',
+      line:{color:COLORS_A[i%COLORS_A.length],width:1.5},
+      marker:{size:4},
+      customdata:cd,
+      hovertemplate:'%{customdata}<extra></extra>',
+    };
+  });
+
+  // Alert: count how many times agua=1
+  const alerts=aguaCols.map(c=>{
+    const vals=fData[c]||[];
+    const n=vals.filter(v=>v===1||v===1.0).length;
+    return{col:c,n};
+  }).filter(a=>a.n>0);
+
+  const alertHtml=alerts.length?`
+    <div style="background:#1a150a;border:1px solid var(--yellow);border-radius:5px;
+                padding:10px 14px;margin-bottom:.75rem;font-size:11px">
+      <div style="color:var(--yellow);font-weight:700;margin-bottom:4px">⚠ Agua detectada en ${alerts.length} tanque(s)</div>
+      ${alerts.map(a=>`<div style="color:#8b949e">${a.col}: <b style="color:var(--yellow)">${a.n} registros</b> con agua</div>`).join('')}
+    </div>`:
+    `<div style="background:#0d1b12;border:1px solid var(--green);border-radius:5px;
+                padding:8px 14px;margin-bottom:.75rem;font-size:11px;color:var(--green)">
+      ✓ Sin agua detectada en ningún tanque durante el período seleccionado
+    </div>`;
+
+  const lay=Object.assign({},LB,{
+    title:{text:'Agua en Tanques (0=sin agua · 1=agua detectada)',font:{size:12,color:'#1a1f2e'},x:0},
+    xaxis:Object.assign({},LB.xaxis,{title:{text:'Tiempo',font:{size:11}}}),
+    yaxis:{title:{text:'Estado agua (0/1)',font:{size:11}},gridcolor:'#e8ecef',
+           zerolinecolor:'#e8ecef',tickfont:{size:10},range:[-0.1,1.5],
+           tickvals:[0,1],ticktext:['Sin agua','Agua']},
+    margin:{t:50,r:30,b:55,l:80},
+    legend:{orientation:'h',y:1.10,x:0,font:{size:10},bgcolor:'transparent'},
+    shapes:[{type:'rect',xref:'paper',x0:0,x1:1,y0:0.5,y1:1.5,
+             fillcolor:'rgba(248,81,73,.07)',line:{width:0}}],
+  });
+  delete lay.yaxis2;
+
+  const div=document.getElementById('panel_agua');
+  div.innerHTML=alertHtml+'<div class="chart-box"><div id="ch_agua" style="height:400px"></div></div>';
+  Plotly.react('ch_agua',traces,lay,{responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']});
+}
+
+
+
+function haversineKm(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+
+
+// Helper: primer-ultimo valor (igual a LASTNONBLANK en MIN/MAX index de PBI)
+function firstLastDiff(arr, idxs){
+  let vf=null, vl=null;
+  for(let j=0;j<idxs.length;j++){const v=arr[idxs[j]];if(v!=null&&!isNaN(v)){vf=v;break;}}
+  for(let j=idxs.length-1;j>=0;j--){const v=arr[idxs[j]];if(v!=null&&!isNaN(v)){vl=v;break;}}
+  return (vf!=null&&vl!=null)?Math.round(vf-vl):null;
+}
+
+// Helper: Consumo tanques
+// Igual que PBI: primer_valor - ultimo_valor (no suma drops intermedios = sin ruido)
+function calcTKConsumo(tkAllCols, idxs){
+  // Prioridad 1: TK Diario (columna acumulada diaria — misma que PBI usa como [TK Diario])
+  const tkDiario = COLS.find(c=>/^TK\s*DIARIO$/i.test(c.trim()));
+  if(tkDiario && fData[tkDiario]){
+    const r=firstLastDiff(fData[tkDiario],idxs);
+    if(r!=null) return r;
+  }
+  // Prioridad 2: Remanencia Total (primer - ultimo, sin acumulacion de ruido)
+  const remCol = detectRemCol(COLS);
+  if(remCol && fData[remCol]){
+    const r=firstLastDiff(fData[remCol],idxs);
+    if(r!=null) return r;
+  }
+  // Fallback: suma TK individuales (excluir DIARIO), primer-ultimo por tanque
+  const safeCols = tkAllCols.filter(c=>!/DIARIO/i.test(c));
+  if(!safeCols.length) return null;
+  let total=0, found=0;
+  for(const col of safeCols){
+    const r=firstLastDiff(fData[col]||[],idxs);
+    if(r!=null){total+=r;found++;}
+  }
+  return found?Math.round(total):null;
+}
+
+// Helper: Caudalimetro desde Trip Volume Prop + Gen
+function calcTripCaud(tripCols,idxs){
+  if(!tripCols.length) return null;
+  let total=0,found=0;
+  for(const col of tripCols){
+    const arr=fData[col]||[];
+    const isProp=col.toLowerCase().includes('prop');
+    const maxDif=isProp?1000000:10000;
+    let colTotal=0,hasData=false;
+    for(let j=1;j<idxs.length;j++){
+      const v0=arr[idxs[j-1]],v1=arr[idxs[j]];
+      if(v0!=null&&v1!=null&&!isNaN(v0)&&!isNaN(v1)){
+        hasData=true;
+        const dif=v1-v0;
+        if(dif>0&&dif<=maxDif) colTotal+=dif;
+      }
+    }
+    if(hasData){total+=colTotal;found++;}
+  }
+  return found?Math.round(total):null;
+}
+
+function calcDailyStats(){
+  if(!fData||!fData.ts||!fData.ts.length) return null;
+  const tkAllCols = [...detectTKCols(COLS,'BR'),...detectTKCols(COLS,'STB'),...detectTKCenterCols(COLS)];
+  const tripCols = COLS.filter(c=>c.startsWith('Trip Volume Prop.')||c.startsWith('Trip Volume Gen.')||c.startsWith('Trip Volume Búnker'));
+  const hmCols  = COLS.filter(c=>c.startsWith('Horas Maquina Prop')||c.startsWith('HM Totales Prop'));
+  const velCol  = COLS.find(c=>c==='Velocidad'||c.toLowerCase().includes('velocidad'));
+  const latCol  = COLS.find(c=>c==='Latitud'||c.toLowerCase()===('latitud'));
+  const lonCol  = COLS.find(c=>c==='Longitud'||c.toLowerCase()===('longitud'));
+  const ts = fData.ts;
+
+  // Group indices by "reporting day": día N = [N 08:00, N+1 08:00)
+  const dayMap={};
+  for(let i=0;i<ts.length;i++){
+    const d=new Date(ts[i]);
+    d.setHours(d.getHours()-8);
+    const day=d.toISOString().slice(0,10);
+    if(!dayMap[day]) dayMap[day]=[];
+    dayMap[day].push(i);
+  }
+  const days=Object.keys(dayMap).sort();
+
+  return days.map(day=>{
+    const idxs=dayMap[day];
+    const first=idxs[0], last=idxs[idxs.length-1];
+
+    // Consumo Tanques: suma de caidas en cada TK BR + STB (incluye Diario)
+    const consTanques = calcTKConsumo(tkAllCols, idxs);
+
+    // Consumo Caudalimetros: suma Trip Volume Prop + Gen
+    const consCaud = calcTripCaud(tripCols, idxs);
+
+    const diff=(consTanques!=null&&consCaud!=null)?consTanques-consCaud:null;
+
+    // ── Horas Máquina ──
+    let horasOp=null;
+    if(hmCols.length){
+      let totalDelta=0, counted=0;
+      for(const hm of hmCols){
+        let vf=null,vl=null;
+        for(let j=0;j<idxs.length;j++){const v=fData[hm][idxs[j]];if(v!=null&&!isNaN(v)){vf=v;break;}}
+        for(let j=idxs.length-1;j>=0;j--){const v=fData[hm][idxs[j]];if(v!=null&&!isNaN(v)){vl=v;break;}}
+        if(vf!=null&&vl!=null&&vl>=vf){totalDelta+=vl-vf;counted++;}
+      }
+      if(counted) horasOp=Math.round(totalDelta/counted*100)/100;
+    }
+
+    // ── Distancia ──
+    let distancia=null;
+    if(velCol){
+      let dist=0;
+      for(let j=1;j<idxs.length;j++){
+        const t0=new Date(ts[idxs[j-1]]).getTime(), t1=new Date(ts[idxs[j]]).getTime();
+        const dt=(t1-t0)/3600000;
+        const v=fData[velCol][idxs[j-1]];
+        if(v!=null&&!isNaN(v)&&v>=0&&dt>0&&dt<2) dist+=v*dt;
+      }
+      distancia=Math.round(dist*100)/100;
+    } else if(latCol&&lonCol){
+      let dist=0;
+      for(let j=1;j<idxs.length;j++){
+        const la1=fData[latCol][idxs[j-1]],lo1=fData[lonCol][idxs[j-1]];
+        const la2=fData[latCol][idxs[j]],  lo2=fData[lonCol][idxs[j]];
+        if(la1!=null&&lo1!=null&&la2!=null&&lo2!=null)
+          dist+=haversineKm(la1,lo1,la2,lo2);
+      }
+      distancia=Math.round(dist*100)/100;
+    }
+
+    return {day, consTanques, consCaud, diff, horasOp, distancia};
+  });
+}
+
+function renderResumenDiario(){
+  const div=document.getElementById('panel_resumen');
+  if(!div) return;
+  const stats=calcDailyStats();
+  if(!stats||!stats.length){
+    div.innerHTML='<p style="padding:2rem;color:var(--muted);font-size:12px">No hay datos suficientes para el resumen diario.</p>';
+    return;
+  }
+
+  const days      = stats.map(s=>s.day.slice(5).replace('-','/'));
+  const tanques   = stats.map(s=>s.consTanques);
+  const cauds     = stats.map(s=>s.consCaud);
+  const diffs     = stats.map(s=>s.diff);
+  const horas     = stats.map(s=>s.horasOp);
+  const distancia = stats.map(s=>s.distancia);
+
+  const C_TEAL='#01B8AA', C_DARK='#374649', C_RED='#FD625E', C_YEL='#F2C80F';
+  const OPTS={responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']};
+  function fmtV(v){return v==null?'—':v.toLocaleString('es',{maximumFractionDigits:0});}
+
+  // day label → full date mapping for drilldown
+  _lastDayLabelMap={};
+  stats.forEach(s=>{ _lastDayLabelMap[s.day.slice(5).replace('-','/')]=s.day; });
+
+  const totTK   = tanques.reduce((a,v)=>a+(v||0),0);
+  const totCAUD = cauds.reduce((a,v)=>a+(v||0),0);
+  const totDiff = totTK-totCAUD;
+  const totHM   = horas.reduce((a,v)=>a+(v||0),0);
+  const totDist = distancia.reduce((a,v)=>a+(v||0),0);
+  const diffPct = totCAUD>0?Math.abs(totDiff/totCAUD*100):null;
+  const diffSt  = diffPct==null?'neutral':diffPct<2?'ok':diffPct<5?'warn':'bad';
+
+  const kpiHtml=`<div class="kpi-grid" style="margin-bottom:.75rem">
+    <div class="kpi" style="border-left-color:${C_TEAL}">
+      <div class="klabel">Total Consumo Tanques</div>
+      <div class="kval">${fmtV(totTK)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div>
+      <div class="ksub">${stats.length} días · click en barra para detalle horario</div>
+    </div>
+    <div class="kpi" style="border-left-color:${C_DARK}">
+      <div class="klabel">Total Consumo Caudalímetros</div>
+      <div class="kval">${fmtV(totCAUD)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div>
+    </div>
+    <div class="kpi ${diffSt}">
+      <div class="klabel">Diferencia Total</div>
+      <div class="kval">${fmtV(totDiff)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div>
+      <div class="kstatus">${diffPct!=null?diffPct.toFixed(1)+'%':''}</div>
+    </div>
+    ${totHM>0?`<div class="kpi" style="border-left-color:${C_TEAL}"><div class="klabel">Total Horas Máquina</div><div class="kval">${fmtV(totHM)} <span style="font-size:10px;font-weight:400;color:var(--muted)">hs</span></div></div>`:''}
+    ${totDist>0?`<div class="kpi" style="border-left-color:${C_YEL}"><div class="klabel">Distancia Total</div><div class="kval">${totDist.toLocaleString('es',{maximumFractionDigits:1})} <span style="font-size:10px;font-weight:400;color:var(--muted)">km</span></div></div>`:''}
+  </div>`;
+
+  const baseLayout={
+    plot_bgcolor:'transparent',paper_bgcolor:'transparent',
+    font:{family:"'Courier New',monospace",size:11,color:'#6c757d'},
+    hoverlabel:{bgcolor:'#ffffff',bordercolor:'#dee2e6',font:{family:"'Courier New',monospace",size:11},namelength:-1},
+    hovermode:'x unified',
+    legend:{orientation:'h',y:1.1,x:0,font:{size:10},bgcolor:'transparent'},
+    margin:{t:50,r:80,b:55,l:70},
+    xaxis:{gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+  };
+
+  const hasConsumo = tanques.some(v=>v!=null)||cauds.some(v=>v!=null);
+  const hasHM      = horas.some(v=>v!=null);
+  const hasDist    = distancia.some(v=>v!=null);
+  const textSettings={textposition:'outside',textfont:{size:9,family:"'Courier New',monospace"}};
+
+  const traces1=[];
+  if(tanques.some(v=>v!=null)) traces1.push({x:days,y:tanques,name:'Consumo Total Tanques',type:'bar',marker:{color:C_TEAL},text:tanques.map(v=>v!=null?fmtV(v):''),...textSettings,hovertemplate:'Tanques: %{y:,.0f} L<extra></extra>',cursor:'pointer'});
+  if(cauds.some(v=>v!=null))   traces1.push({x:days,y:cauds,name:'Consumo Total Caudalímetros',type:'bar',marker:{color:C_DARK},text:cauds.map(v=>v!=null?fmtV(v):''),...textSettings,hovertemplate:'Caudalímetros: %{y:,.0f} L<extra></extra>'});
+  if(diffs.some(v=>v!=null))   traces1.push({x:days,y:diffs,name:'Diferencia',type:'scatter',mode:'lines+markers+text',yaxis:'y2',line:{color:C_RED,width:2.5},marker:{color:C_RED,size:7},text:diffs.map(v=>v!=null?`<b>${fmtV(v)}</b>`:''),textposition:'top center',textfont:{size:9,color:C_RED,family:"'Courier New',monospace"},hovertemplate:'Diferencia: %{y:,.0f} L<extra></extra>'});
+
+  const lay1=Object.assign({},baseLayout,{
+    title:{text:'Consumo Diario — Tanques vs Caudalímetros  🖱 click en barra para detalle horario',font:{size:12,color:'#1a1f2e'},x:0},
+    barmode:'group',
+    yaxis:{title:{text:'Litros',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'Diferencia [L]',font:{size:11,color:C_RED}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:C_RED}},
+  });
+
+  const traces2=[];
+  if(hasHM)   traces2.push({x:days,y:horas,name:'Horas Máquina',type:'bar',marker:{color:C_TEAL},text:horas.map(v=>v!=null?v.toLocaleString('es',{maximumFractionDigits:2}):''),...textSettings,hovertemplate:'HM: %{y:.2f} hs<extra></extra>'});
+  if(hasDist) traces2.push({x:days,y:distancia,name:'Distancia Recorrida',type:'scatter',mode:'lines+markers+text',yaxis:hasHM?'y2':'y',line:{color:C_YEL,width:2.5},marker:{color:C_YEL,size:7},text:distancia.map(v=>v!=null?`<b>${v.toLocaleString('es',{maximumFractionDigits:2})}</b>`:''),textposition:'top center',textfont:{size:9,color:C_YEL,family:"'Courier New',monospace"},hovertemplate:'Distancia: %{y:.2f} km<extra></extra>'});
+
+  const lay2=Object.assign({},baseLayout,{
+    title:{text:'Horas Máquina y Distancia Recorrida Diaria  🖱 click para detalle horario',font:{size:12,color:'#1a1f2e'},x:0},
+    yaxis:{title:{text:'Horas',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+    yaxis2:{title:{text:'Distancia [km]',font:{size:11,color:C_YEL}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:C_YEL}},
+  });
+
+  const chart2Html=(hasHM||hasDist)?`<div class="chart-box" style="margin-top:.75rem"><div id="ch_resumen_hm" style="height:380px"></div></div>`:'';
+  div.innerHTML=kpiHtml+
+    (hasConsumo?`<div class="chart-box" style="cursor:pointer"><div id="ch_resumen_consumo" style="height:420px"></div></div>`:'')+
+    chart2Html+
+    `<div id="drilldown-daily"></div>`;
+
+  const attachClick=(elId)=>{
+    const el=document.getElementById(elId);
+    if(!el) return;
+    el.removeAllListeners('plotly_click');
+    el.on('plotly_click',data=>{
+      const lbl=data.points[0].x;
+      const full=_lastDayLabelMap[lbl];
+      if(full) renderDrilldown(full,lbl);
+    });
+  };
+
+  if(hasConsumo){ Plotly.react('ch_resumen_consumo',traces1,lay1,OPTS); attachClick('ch_resumen_consumo'); }
+  if(hasHM||hasDist){ setTimeout(()=>{ Plotly.react('ch_resumen_hm',traces2,lay2,OPTS); attachClick('ch_resumen_hm'); },0); }
+}
+
+// ═══════════════════════════════════════════════════════
+// HOURLY STATS (drilldown)
+// ═══════════════════════════════════════════════════════
+function calcHourlyStats(fullDate){
+  if(!fData||!fData.ts) return null;
+  const tkAllCols = [...detectTKCols(COLS,'BR'),...detectTKCols(COLS,'STB'),...detectTKCenterCols(COLS)];
+  const tripCols = COLS.filter(c=>c.startsWith('Trip Volume Prop.')||c.startsWith('Trip Volume Gen.')||c.startsWith('Trip Volume Búnker'));
+  const hmCols  = COLS.filter(c=>c.startsWith('Horas Maquina Prop')||c.startsWith('HM Totales Prop'));
+  const velCol  = COLS.find(c=>c==='Velocidad'||c.toLowerCase().includes('velocidad'));
+  const latCol  = COLS.find(c=>c==='Latitud'||c.toLowerCase()==='latitud');
+  const lonCol  = COLS.find(c=>c==='Longitud'||c.toLowerCase()==='longitud');
+  const ts=fData.ts;
+
+  const hourMap={};
+  for(let hr=0;hr<24;hr++) hourMap[hr]=[];
+  for(let i=0;i<ts.length;i++){
+    const d=new Date(ts[i]);
+    d.setHours(d.getHours()-8);
+    if(d.toISOString().slice(0,10)!==fullDate) continue;
+    const hr=parseInt(ts[i].slice(11,13),10);
+    hourMap[hr].push(i);
+  }
+
+  // Order: 08:00 → 07:00 next day
+  const orderedHours=[8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7];
+
+  return orderedHours.map(hr=>{
+    const idxs=hourMap[hr];
+    const label=String(hr).padStart(2,'0')+':00';
+    if(!idxs.length) return {hr,label,consTanques:null,consCaud:null,diff:null,horasOp:null,distancia:null};
+
+    const consTanques = calcTKConsumo(tkAllCols, idxs);
+
+    const consCaud = calcTripCaud(tripCols, idxs);
+
+    const diff=(consTanques!=null&&consCaud!=null)?consTanques-consCaud:null;
+
+    let horasOp=null;
+    if(hmCols.length){
+      let total=0,cnt=0;
+      for(const hm of hmCols){
+        let vf=null,vl=null;
+        for(let j=0;j<idxs.length;j++){const v=fData[hm][idxs[j]];if(v!=null&&!isNaN(v)){vf=v;break;}}
+        for(let j=idxs.length-1;j>=0;j--){const v=fData[hm][idxs[j]];if(v!=null&&!isNaN(v)){vl=v;break;}}
+        if(vf!=null&&vl!=null&&vl>=vf){total+=vl-vf;cnt++;}
+      }
+      if(cnt) horasOp=Math.round(total/cnt*100)/100;
+    }
+
+    let distancia=null;
+    if(velCol){
+      let dist=0;
+      for(let j=1;j<idxs.length;j++){
+        const t0=new Date(ts[idxs[j-1]]).getTime(),t1=new Date(ts[idxs[j]]).getTime();
+        const dt=(t1-t0)/3600000;
+        const v=fData[velCol][idxs[j-1]];
+        if(v!=null&&!isNaN(v)&&v>=0&&dt>0&&dt<1.5) dist+=v*dt;
+      }
+      distancia=Math.round(dist*100)/100;
+    } else if(latCol&&lonCol){
+      let dist=0;
+      for(let j=1;j<idxs.length;j++){
+        const la1=fData[latCol][idxs[j-1]],lo1=fData[lonCol][idxs[j-1]];
+        const la2=fData[latCol][idxs[j]],lo2=fData[lonCol][idxs[j]];
+        if(la1!=null&&lo1!=null&&la2!=null&&lo2!=null) dist+=haversineKm(la1,lo1,la2,lo2);
+      }
+      distancia=Math.round(dist*100)/100;
+    }
+
+    return {hr,label,consTanques,consCaud,diff,horasOp,distancia};
+  });
+}
+
+function renderDrilldown(fullDate,dayLabel){
+  const C_TEAL='#01B8AA',C_DARK='#374649',C_RED='#FD625E',C_YEL='#F2C80F';
+  const OPTS={responsive:true,displaylogo:false,displayModeBar:true,modeBarButtonsToRemove:['lasso2d','select2d']};
+  function fmtV(v){return v==null?'—':v.toLocaleString('es',{maximumFractionDigits:0});}
+
+  const dd=document.getElementById('drilldown-daily');
+  if(!dd) return;
+
+  const stats=calcHourlyStats(fullDate);
+  if(!stats){dd.innerHTML='';return;}
+
+  const hours = stats.map(s=>s.label);
+  const tks   = stats.map(s=>s.consTanques);
+  const cauds = stats.map(s=>s.consCaud);
+  const diffs = stats.map(s=>s.diff);
+  const horas = stats.map(s=>s.horasOp);
+  const dists = stats.map(s=>s.distancia);
+
+  const hasConsumo = tks.some(v=>v!=null)||cauds.some(v=>v!=null);
+  const hasHM      = horas.some(v=>v!=null);
+  const hasDist    = dists.some(v=>v!=null);
+  const active     = stats.filter(s=>s.consTanques!=null||s.consCaud!=null||s.horasOp!=null||s.distancia!=null).length;
+
+  const totTK   = tks.reduce((a,v)=>a+(v||0),0);
+  const totCAUD = cauds.reduce((a,v)=>a+(v||0),0);
+  const totDiff = totTK-totCAUD;
+  const totHM   = horas.reduce((a,v)=>a+(v||0),0);
+  const totDist = dists.reduce((a,v)=>a+(v||0),0);
+  const dSt     = Math.abs(totDiff)<500?'ok':Math.abs(totDiff)<1500?'warn':'bad';
+
+  const kpiHtml=`<div class="kpi-grid" style="margin-bottom:.75rem;margin-top:.5rem">
+    <div class="kpi" style="border-left-color:${C_TEAL}"><div class="klabel">Consumo Tanques</div><div class="kval">${fmtV(totTK)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div><div class="ksub">${active} horas con datos</div></div>
+    <div class="kpi" style="border-left-color:${C_DARK}"><div class="klabel">Consumo Caudalímetros</div><div class="kval">${fmtV(totCAUD)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div></div>
+    <div class="kpi ${dSt}"><div class="klabel">Diferencia</div><div class="kval">${fmtV(totDiff)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div></div>
+    ${totHM>0?`<div class="kpi" style="border-left-color:${C_TEAL}"><div class="klabel">Horas Máquina</div><div class="kval">${totHM.toFixed(2)} <span style="font-size:10px;font-weight:400;color:var(--muted)">hs</span></div></div>`:''}
+    ${totDist>0?`<div class="kpi" style="border-left-color:${C_YEL}"><div class="klabel">Distancia</div><div class="kval">${totDist.toFixed(1)} <span style="font-size:10px;font-weight:400;color:var(--muted)">km</span></div></div>`:''}
+  </div>`;
+
+  const baseL={
+    plot_bgcolor:'transparent',paper_bgcolor:'transparent',
+    font:{family:"'Courier New',monospace",size:11,color:'#6c757d'},
+    hoverlabel:{bgcolor:'#ffffff',bordercolor:'#dee2e6',font:{family:"'Courier New',monospace",size:11},namelength:-1},
+    hovermode:'x unified',barmode:'group',
+    legend:{orientation:'h',y:1.1,x:0,font:{size:10},bgcolor:'transparent'},
+    margin:{t:54,r:80,b:50,l:70},
+    xaxis:{gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10},title:{text:'Hora',font:{size:11}},tickangle:-45},
+  };
+  const txtS={textposition:'outside',textfont:{size:8,family:"'Courier New',monospace"}};
+
+  dd.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;border-top:2px solid #01B8AA;margin-top:1.25rem;padding-top:.9rem;margin-bottom:.5rem">
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <div style="width:4px;height:32px;background:#01B8AA;border-radius:2px"></div>
+        <div>
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">🔍 Detalle horario</div>
+          <div style="font-size:15px;font-weight:700;color:#1a1f2e">📅 ${dayLabel} — ${fullDate}</div>
+        </div>
+      </div>
+      <button onclick="document.getElementById('drilldown-daily').innerHTML='';document.getElementById('drilldown-daily').scrollIntoView({behavior:'smooth',block:'start'})"
+        style="padding:5px 16px;font-size:10px;font-family:inherit;background:#f0f2f5;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;letter-spacing:.05em">✕ Cerrar</button>
+    </div>
+    ${kpiHtml}
+    ${hasConsumo?`<div class="chart-box"><div id="ch_drill_consumo" style="height:400px"></div></div>`:''}
+    ${(hasHM||hasDist)?`<div class="chart-box" style="margin-top:.75rem"><div id="ch_drill_hm" style="height:340px"></div></div>`:''}
+  `;
+
+  if(hasConsumo){
+    const t1=[];
+    if(tks.some(v=>v!=null))   t1.push({x:hours,y:tks,name:'Tanques',type:'bar',marker:{color:C_TEAL},text:tks.map(v=>v&&v>0?fmtV(v):''),...txtS,hovertemplate:'Tanques: %{y:,.0f} L<extra></extra>'});
+    if(cauds.some(v=>v!=null)) t1.push({x:hours,y:cauds,name:'Caudalímetros',type:'bar',marker:{color:C_DARK},text:cauds.map(v=>v&&v>0?fmtV(v):''),...txtS,hovertemplate:'Caudal: %{y:,.0f} L<extra></extra>'});
+    if(diffs.some(v=>v!=null)) t1.push({x:hours,y:diffs,name:'Diferencia',type:'scatter',mode:'lines+markers+text',yaxis:'y2',line:{color:C_RED,width:2},marker:{color:C_RED,size:5},text:diffs.map(v=>v!=null&&v!==0?`<b>${fmtV(v)}</b>`:''),textposition:'top center',textfont:{size:8,color:C_RED,family:"'Courier New',monospace"},hovertemplate:'Diff: %{y:,.0f} L<extra></extra>'});
+    Plotly.react('ch_drill_consumo',t1,Object.assign({},baseL,{
+      title:{text:`Consumo por Hora — ${dayLabel} · ${fullDate}`,font:{size:12,color:'#1a1f2e'},x:0},
+      yaxis:{title:{text:'Litros',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+      yaxis2:{title:{text:'Diferencia [L]',font:{size:11,color:C_RED}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:C_RED}},
+    }),OPTS);
+  }
+
+  if(hasHM||hasDist){
+    const t2=[];
+    if(hasHM)   t2.push({x:hours,y:horas,name:'Horas Máquina',type:'bar',marker:{color:C_TEAL},text:horas.map(v=>v&&v>0?v.toFixed(2):''),...txtS,hovertemplate:'HM: %{y:.2f} hs<extra></extra>'});
+    if(hasDist) t2.push({x:hours,y:dists,name:'Distancia',type:'scatter',mode:'lines+markers+text',yaxis:hasHM?'y2':'y',line:{color:C_YEL,width:2},marker:{color:C_YEL,size:5},text:dists.map(v=>v&&v>0?`<b>${v.toFixed(1)}</b>`:''),textposition:'top center',textfont:{size:8,color:C_YEL,family:"'Courier New',monospace"},hovertemplate:'Dist: %{y:.2f} km<extra></extra>'});
+    setTimeout(()=>Plotly.react('ch_drill_hm',t2,Object.assign({},baseL,{
+      title:{text:`Horas Máquina y Distancia por Hora — ${dayLabel}`,font:{size:12,color:'#1a1f2e'},x:0},
+      yaxis:{title:{text:'Horas',font:{size:11}},gridcolor:'#e8ecef',zerolinecolor:'#e8ecef',tickfont:{size:10}},
+      yaxis2:{title:{text:'Distancia [km]',font:{size:11,color:C_YEL}},overlaying:'y',side:'right',gridcolor:'transparent',zerolinecolor:'transparent',tickfont:{size:10,color:C_YEL}},
+    }),OPTS),0);
+  }
+
+  dd.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+</script>
+</body>
+</html>

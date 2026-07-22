@@ -1838,21 +1838,78 @@ function calcularCaudal(){
   const CAUD=caud.map(v=>v-caud0);
 
   // TK consumo acumulado — detección automática de bunker (≥10.000 L en ≤1h)
-  const BUNKER_MIN_L=10000, BUNKER_MAX_H=1;
+  // Ventana: cada evento detectado se extiende ±20min (padding simétrico) y los
+  // eventos cuyas ventanas se solapan se fusionan en uno solo.
+  const BUNKER_MIN_L=10000, BUNKER_MAX_H=1, BUNKER_PAD_MIN=20;
   const tk0=tk[0];
-  const TK=new Array(tk.length);
+  const tMs=tsArr.map(t=>new Date(t).getTime());
+
+  // Paso 1: intervalos i-1→i que cumplen la condición de subida rápida
+  const triggers=[];
+  for(let i=1;i<tk.length;i++){
+    const d=tk[i]-tk[i-1];
+    const dtH=(tMs[i]-tMs[i-1])/3600000;
+    if(d>=BUNKER_MIN_L&&dtH<=BUNKER_MAX_H) triggers.push(i);
+  }
+
+  // Paso 2: agrupar triggers consecutivos en corridas crudas [idxIni,idxFin]
+  const rawRuns=[];
+  for(const i of triggers){
+    const last=rawRuns[rawRuns.length-1];
+    if(last && i-1<=last[1]) last[1]=i;
+    else rawRuns.push([i-1,i]);
+  }
+
+  // Paso 3: padding ±20min sobre cada corrida (en tiempo) + fusión de solapadas
+  const PAD_MS=BUNKER_PAD_MIN*60000;
+  const padded=rawRuns.map(([s,e])=>({ws:tMs[s]-PAD_MS,we:tMs[e]+PAD_MS}))
+                       .sort((a,b)=>a.ws-b.ws);
+  const merged=[];
+  for(const ep of padded){
+    const last=merged[merged.length-1];
+    if(last && ep.ws<=last.we) last.we=Math.max(last.we,ep.we);
+    else merged.push({ws:ep.ws,we:ep.we});
+  }
+
+  // Paso 4: para cada ventana fusionada, tomar el primer/último índice real
+  // dentro de la ventana y calcular el monto excluido como su diferencia neta
+  function idxAtOrAfter(t){ for(let k=0;k<tMs.length;k++) if(tMs[k]>=t) return k; return tMs.length-1; }
+  function idxAtOrBefore(t){ for(let k=tMs.length-1;k>=0;k--) if(tMs[k]<=t) return k; return 0; }
   const bunkerEvents=[];
-  let offset=0, prev=tk0;
+  const bunkerRanges=[];
+  const offsetAtIdx={};
+  for(const {ws,we} of merged){
+    const iStart=idxAtOrAfter(ws), iEnd=idxAtOrBefore(we);
+    if(iEnd<=iStart) continue;
+    const amount=tk[iEnd]-tk[iStart];
+    if(amount>0){
+      bunkerEvents.push({t:tsArr[iStart],tEnd:tsArr[iEnd],amount:Math.round(amount)});
+      offsetAtIdx[iEnd]=(offsetAtIdx[iEnd]||0)+amount;
+      bunkerRanges.push({iStart,iEnd});
+    }
+  }
+
+  // Paso 5: reconstruir TK aplicando el offset acumulado al final de cada ventana
+  const TK=new Array(tk.length);
+  let offset=0;
   TK[0]=0;
   for(let i=1;i<tk.length;i++){
-    const d=tk[i]-prev;
-    const dtH=(new Date(tsArr[i]).getTime()-new Date(tsArr[i-1]).getTime())/3600000;
-    if(d>=BUNKER_MIN_L&&dtH<=BUNKER_MAX_H){
-      offset+=d;
-      bunkerEvents.push({t:tsArr[i],amount:Math.round(d)});
-    }
+    if(offsetAtIdx[i]) offset+=offsetAtIdx[i];
     TK[i]=tk0-tk[i]+offset;
-    prev=tk[i];
+  }
+
+  // Paso 6: suavizar la ventana de cada bunker — en vez de mostrar el pico/pozo
+  // artificial mientras el offset "alcanza" a la subida real del tanque, se
+  // interpola una línea recta entre el valor previo al evento y el valor ya
+  // corregido al final. Así el bunker no se grafica (no distorsiona la curva).
+  for(const {iStart,iEnd} of bunkerRanges){
+    const v0=TK[iStart], v1=TK[iEnd];
+    const t0=tMs[iStart], t1=tMs[iEnd];
+    const dt=t1-t0;
+    for(let i=iStart+1;i<iEnd;i++){
+      const frac=dt>0?(tMs[i]-t0)/dt:0;
+      TK[i]=v0+(v1-v0)*frac;
+    }
   }
 
   const DIFF=TK.map((v,i)=>v-CAUD[i]);
@@ -1901,23 +1958,31 @@ function renderCaudalChart(){
       ${bunkerEvents.length?`<div class="kpi warn">
         <div class="klabel">Bunker detectado</div>
         <div class="kval">${fmtN(totalBunker)} <span style="font-size:10px;font-weight:400;color:var(--muted)">L</span></div>
-        <div class="ksub">${bunkerEvents.length} evento(s) ≥10.000 L/h — excluidos del TK</div>
+        <div class="ksub">${bunkerEvents.length} evento(s) ≥10.000 L/h (ventana ±20min) — excluidos del TK</div>
       </div>`:''}
     </div>`;
 
-  // Líneas verticales para bunker events
-  const bunkerShapes=bunkerEvents.map(b=>({
-    type:'line',xref:'x',yref:'paper',
-    x0:b.t,x1:b.t,y0:0,y1:1,
-    line:{color:'#f2c80f',width:2,dash:'dot'}
-  }));
-  const bunkerAnnotations=bunkerEvents.map(b=>({
-    x:b.t,yref:'paper',y:1.04,
-    text:`⛽ ${fmtN(b.amount)} L`,
-    showarrow:false,
-    font:{size:9,color:'#f2c80f',family:"'Courier New',monospace"},
-    bgcolor:'rgba(0,0,0,0.5)',borderpad:2
-  }));
+  // Marca visual (gris) de los eventos de bunker: línea vertical de inicio y
+  // fin de la ventana + etiqueta con el valor detectado y el horario.
+  // No se grafica el bunker con el color/relleno de la curva — solo el indicador.
+  const bunkerShapes=[];
+  const bunkerAnnotations=[];
+  bunkerEvents.forEach(b=>{
+    bunkerShapes.push(
+      {type:'line',xref:'x',yref:'paper',x0:b.t,x1:b.t,y0:0,y1:1,
+       line:{color:'#6c757d',width:1.5,dash:'dot'}},
+      {type:'line',xref:'x',yref:'paper',x0:b.tEnd,x1:b.tEnd,y0:0,y1:1,
+       line:{color:'#6c757d',width:1.5,dash:'dot'}}
+    );
+    const hIni=b.t.slice(11,16), hFin=b.tEnd.slice(11,16);
+    bunkerAnnotations.push({
+      x:b.t,yref:'paper',y:1.04,
+      text:`⛽ Bunker ${fmtN(b.amount)} L<br>${hIni} → ${hFin}`,
+      showarrow:false,align:'left',
+      font:{size:9,color:'#6c757d',family:"'Courier New',monospace"},
+      bgcolor:'rgba(108,117,125,0.12)',borderpad:3
+    });
+  });
 
   const traces=[
     {x:ts,y:CAUD,name:`CAUD — ${fmtN(finalC)} L`,type:'scatter',mode:'lines',
@@ -2331,20 +2396,71 @@ function firstLastDiff(arr, idxs){
   return (vf!=null&&vl!=null)?Math.round(vf-vl):null;
 }
 
-// Helper: Consumo tanques
-// Igual que PBI: primer_valor - ultimo_valor (no suma drops intermedios = sin ruido)
-function calcTKConsumo(tkAllCols, idxs){
-  // Prioridad 1: TK Diario (columna acumulada diaria — misma que PBI usa como [TK Diario])
-  const tkDiario = COLS.find(c=>/^TK\s*DIARIO$/i.test(c.trim()));
-  if(tkDiario && fData[tkDiario]){
-    const r=firstLastDiff(fData[tkDiario],idxs);
-    if(r!=null) return r;
+// Helper: detección de bunker (recarga) dentro de un rango de índices (idxs).
+// Misma lógica que calcularCaudal(): subida ≥10.000L en ≤1h, ventana ±20min,
+// fusión de ventanas solapadas. Devuelve el litraje total que debe SUMARSE
+// de vuelta al (primer-ultimo) para no contarlo como consumo.
+function detectBunkerAmount(arr, idxs, tsGlobal){
+  const BUNKER_MIN_L=10000, BUNKER_MAX_H=1, BUNKER_PAD_MIN=20;
+  const pts=[];
+  for(const i of idxs){
+    const v=arr[i];
+    if(v!=null&&!isNaN(v)) pts.push({t:new Date(tsGlobal[i]).getTime(),v});
   }
-  // Prioridad 2: Remanencia Total (primer - ultimo, sin acumulacion de ruido)
+  if(pts.length<2) return 0;
+
+  const triggers=[];
+  for(let k=1;k<pts.length;k++){
+    const d=pts[k].v-pts[k-1].v;
+    const dtH=(pts[k].t-pts[k-1].t)/3600000;
+    if(d>=BUNKER_MIN_L&&dtH<=BUNKER_MAX_H) triggers.push(k);
+  }
+  if(!triggers.length) return 0;
+
+  const rawRuns=[];
+  for(const k of triggers){
+    const last=rawRuns[rawRuns.length-1];
+    if(last&&k-1<=last[1]) last[1]=k;
+    else rawRuns.push([k-1,k]);
+  }
+
+  const PAD_MS=BUNKER_PAD_MIN*60000;
+  const padded=rawRuns.map(([s,e])=>({ws:pts[s].t-PAD_MS,we:pts[e].t+PAD_MS}))
+                       .sort((a,b)=>a.ws-b.ws);
+  const merged=[];
+  for(const ep of padded){
+    const last=merged[merged.length-1];
+    if(last&&ep.ws<=last.we) last.we=Math.max(last.we,ep.we);
+    else merged.push({ws:ep.ws,we:ep.we});
+  }
+
+  function idxAtOrAfter(t){for(let k=0;k<pts.length;k++) if(pts[k].t>=t) return k; return pts.length-1;}
+  function idxAtOrBefore(t){for(let k=pts.length-1;k>=0;k--) if(pts[k].t<=t) return k; return 0;}
+
+  let total=0;
+  for(const {ws,we} of merged){
+    const iStart=idxAtOrAfter(ws), iEnd=idxAtOrBefore(we);
+    if(iEnd<=iStart) continue;
+    const amount=pts[iEnd].v-pts[iStart].v;
+    if(amount>0) total+=amount;
+  }
+  return total;
+}
+
+// Helper: Consumo tanques
+// Igual que PBI: primer_valor - ultimo_valor (no suma drops intermedios = sin ruido),
+// más el litraje de bunker detectado dentro del día (se suma de vuelta para no
+// contarlo como consumo real).
+function calcTKConsumo(tkAllCols, idxs){
+  const ts = fData.ts;
+  // Prioridad 1: Remanencia Total (primer - ultimo, sin acumulacion de ruido)
   const remCol = detectRemCol(COLS);
   if(remCol && fData[remCol]){
     const r=firstLastDiff(fData[remCol],idxs);
-    if(r!=null) return r;
+    if(r!=null){
+      const bunker=detectBunkerAmount(fData[remCol],idxs,ts);
+      return Math.round(r+bunker);
+    }
   }
   // Fallback: suma TK individuales (excluir DIARIO), primer-ultimo por tanque
   const safeCols = tkAllCols.filter(c=>!/DIARIO/i.test(c));
@@ -2352,7 +2468,11 @@ function calcTKConsumo(tkAllCols, idxs){
   let total=0, found=0;
   for(const col of safeCols){
     const r=firstLastDiff(fData[col]||[],idxs);
-    if(r!=null){total+=r;found++;}
+    if(r!=null){
+      const bunker=detectBunkerAmount(fData[col],idxs,ts);
+      total+=r+bunker;
+      found++;
+    }
   }
   return found?Math.round(total):null;
 }
@@ -2394,7 +2514,7 @@ function calcDailyStats(){
   for(let i=0;i<ts.length;i++){
     const d=new Date(ts[i]);
     d.setHours(d.getHours()-8);
-    const day=d.toISOString().slice(0,10);
+    const day=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     if(!dayMap[day]) dayMap[day]=[];
     dayMap[day].push(i);
   }
@@ -2578,7 +2698,8 @@ function calcHourlyStats(fullDate){
   for(let i=0;i<ts.length;i++){
     const d=new Date(ts[i]);
     d.setHours(d.getHours()-8);
-    if(d.toISOString().slice(0,10)!==fullDate) continue;
+    const dLocal=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(dLocal!==fullDate) continue;
     const hr=parseInt(ts[i].slice(11,13),10);
     hourMap[hr].push(i);
   }

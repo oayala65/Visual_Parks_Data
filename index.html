@@ -1837,27 +1837,24 @@ function calcularCaudal(){
   const caud0=caud[0];
   const CAUD=caud.map(v=>v-caud0);
 
-  // TK consumo acumulado — detección automática de bunker (≥10.000 L en ≤1h)
-  // Ventana: cada evento detectado se extiende ±20min (padding simétrico) y los
-  // eventos cuyas ventanas se solapan se fusionan en uno solo.
-  const BUNKER_MIN_L=10000, BUNKER_MAX_H=1, BUNKER_PAD_MIN=20;
+  // TK consumo acumulado — detección automática de bunker: ventana deslizante
+  // de 60min (6 bloques de 10min); si la carga acumulada dentro de esa ventana
+  // llega a ≥10.000L, se marca como ventana cruda candidata. Cada ventana
+  // candidata se extiende 2 bloques de 10min (20min) antes del inicio y 20min
+  // después del fin, y las ventanas que se solapan se fusionan en una sola —
+  // ahí se calcula la carga total de bunker.
+  const BUNKER_MIN_L=10000, BUNKER_WINDOW_MIN=60, BUNKER_PAD_MIN=20;
   const tk0=tk[0];
   const tMs=tsArr.map(t=>new Date(t).getTime());
 
-  // Paso 1: intervalos i-1→i que cumplen la condición de subida rápida
-  const triggers=[];
-  for(let i=1;i<tk.length;i++){
-    const d=tk[i]-tk[i-1];
-    const dtH=(tMs[i]-tMs[i-1])/3600000;
-    if(d>=BUNKER_MIN_L&&dtH<=BUNKER_MAX_H) triggers.push(i);
-  }
-
-  // Paso 2: agrupar triggers consecutivos en corridas crudas [idxIni,idxFin]
+  // Paso 1+2: ventana deslizante de 60min por cada punto de partida i
   const rawRuns=[];
-  for(const i of triggers){
-    const last=rawRuns[rawRuns.length-1];
-    if(last && i-1<=last[1]) last[1]=i;
-    else rawRuns.push([i-1,i]);
+  for(let i=0;i<tk.length;i++){
+    let j=i;
+    while(j+1<tk.length&&(tMs[j+1]-tMs[i])<=BUNKER_WINDOW_MIN*60000) j++;
+    if(j===i) continue;
+    const rise=tk[j]-tk[i];
+    if(rise>=BUNKER_MIN_L) rawRuns.push([i,j]);
   }
 
   // Paso 3: padding ±20min sobre cada corrida (en tiempo) + fusión de solapadas
@@ -2401,7 +2398,9 @@ function firstLastDiff(arr, idxs){
 // fusión de ventanas solapadas. Devuelve el litraje total que debe SUMARSE
 // de vuelta al (primer-ultimo) para no contarlo como consumo.
 function detectBunkerAmount(arr, idxs, tsGlobal){
-  const BUNKER_MIN_L=10000, BUNKER_MAX_H=1, BUNKER_PAD_MIN=20;
+  // Misma lógica que calcularCaudal(): ventana deslizante de 60min (6 bloques
+  // de 10min) con carga acumulada ≥10.000L — ver comentario allí.
+  const BUNKER_MIN_L=10000, BUNKER_WINDOW_MIN=60, BUNKER_PAD_MIN=20;
   const pts=[];
   for(const i of idxs){
     const v=arr[i];
@@ -2409,20 +2408,15 @@ function detectBunkerAmount(arr, idxs, tsGlobal){
   }
   if(pts.length<2) return 0;
 
-  const triggers=[];
-  for(let k=1;k<pts.length;k++){
-    const d=pts[k].v-pts[k-1].v;
-    const dtH=(pts[k].t-pts[k-1].t)/3600000;
-    if(d>=BUNKER_MIN_L&&dtH<=BUNKER_MAX_H) triggers.push(k);
-  }
-  if(!triggers.length) return 0;
-
   const rawRuns=[];
-  for(const k of triggers){
-    const last=rawRuns[rawRuns.length-1];
-    if(last&&k-1<=last[1]) last[1]=k;
-    else rawRuns.push([k-1,k]);
+  for(let i=0;i<pts.length;i++){
+    let j=i;
+    while(j+1<pts.length&&(pts[j+1].t-pts[i].t)<=BUNKER_WINDOW_MIN*60000) j++;
+    if(j===i) continue;
+    const rise=pts[j].v-pts[i].v;
+    if(rise>=BUNKER_MIN_L) rawRuns.push([i,j]);
   }
+  if(!rawRuns.length) return 0;
 
   const PAD_MS=BUNKER_PAD_MIN*60000;
   const padded=rawRuns.map(([s,e])=>({ws:pts[s].t-PAD_MS,we:pts[e].t+PAD_MS}))

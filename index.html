@@ -1097,14 +1097,16 @@ function trace(col,name,color,yaxis='y',dash='solid'){
 }
 
 // Context-aware trace — noteFn maps each value to a diagnostic string
-function traceCtx(c,name,color,yaxis,dash,noteFn){
+function traceCtx(c,name,color,yaxis,dash,noteFn,hoverLabelColor){
   if(!c) return null;
   const y=arr(c);
   const cd=y.map(v=>noteFn(v));
-  return{x:fData.ts,y,name,mode:'lines',yaxis:yaxis||'y',
+  const trace={x:fData.ts,y,name,mode:'lines',yaxis:yaxis||'y',
          line:{color,width:1.5,dash:dash||'solid'},
          customdata:cd,
          hovertemplate:'<b>'+name+'</b><br>%{customdata}<extra></extra>'};
+  if(hoverLabelColor) trace.hoverlabel={font:{color:hoverLabelColor}};
+  return trace;
 }
 
 // Diagnostic note functions (shared across all tabs)
@@ -1131,6 +1133,13 @@ function _flowRateNote(v){
   if(v===null||isNaN(v)) return '—';
   if(v<0)  return v.toFixed(2)+' L/h ✗ Negativo';
   return         v.toFixed(2)+' L/h';
+}
+function _cleanTooltipText(text){
+  return String(text).replace(/[^A-Za-z0-9\.\s]/g,'').replace(/\s+/g,' ').trim();
+}
+function _flowRateTooltip(v){
+  if(v===null||isNaN(v)) return '—';
+  return _cleanTooltipText(v.toFixed(2)+' L/h');
 }
 function _rpmNote(v){
   if(v===null||isNaN(v)) return '—';
@@ -1179,7 +1188,7 @@ function renderConsumo(){
   const c=COLORS_M[m]||'#58a6ff';
   if(cFI) traces.push(traceCtx(cFI,'Flow Inyección',c,'y','solid',_flowNote));
   if(cFR) traces.push(traceCtx(cFR,'Flow Retorno','#3fb950','y','dot',_flowNote));
-  if(cFt) traces.push(traceCtx(cFt,'Flow Rate','#d29922','y','dash',_flowRateNote));
+  if(cFt) traces.push(traceCtx(cFt,'Flow Rate','#d29922','y','dash',_flowRateTooltip,'#f2c80f'));
   if(COLS.includes(cRPM)) traces.push(traceCtx(cRPM,'RPM','#f85149','y2','solid',_rpmNote));
   plotIn('consumo',traces,layout({
     title:{text:`Consumo / RPM — Motor ${m==='CNT'?'Central':m}`,font:{size:12,color:'#1a1f2e'},x:0},

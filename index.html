@@ -1873,7 +1873,8 @@ function calcularCaudal(){
   // candidata se extiende 2 bloques de 10min (20min) antes del inicio y 20min
   // después del fin, y las ventanas que se solapan se fusionan en una sola —
   // ahí se calcula la carga total de bunker.
-  const BUNKER_MIN_L=10000, BUNKER_WINDOW_MIN=60, BUNKER_PAD_MIN=20;
+  //const BUNKER_MIN_L=10000, BUNKER_WINDOW_MIN=60, BUNKER_PAD_MIN=20; //Reemplazado por la linea de abajo.
+  const BUNKER_MIN_L=umbral>0?umbral:10000, BUNKER_WINDOW_MIN=60, BUNKER_PAD_MIN=20;
   const tk0=tk[0];
   const tMs=tsArr.map(t=>new Date(t).getTime());
 
